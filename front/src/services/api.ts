@@ -1,14 +1,10 @@
-const URL_BASE =
-  (import.meta as any).env?.VITE_API_URL ||
-  'http://localhost:3001/api';
+const URL_BASE = (
+  import.meta.env.VITE_API_URL ||
+  'http://localhost:3001/api'
+).replace(/\/+$/, '');
 
 function obterToken(): string | null {
   return localStorage.getItem('medsync_token');
-}
-
-export function limparSessao() {
-  localStorage.removeItem('medsync_token');
-  localStorage.removeItem('medsync_usuario');
 }
 
 async function requisicao<T>(
@@ -24,11 +20,9 @@ async function requisicao<T>(
   if (autenticado) {
     const token = obterToken();
 
-    if (!token) {
-      throw new Error('Sessão não encontrada. Faça login novamente.');
+    if (token) {
+      cabecalhos['Authorization'] = `Bearer ${token}`;
     }
-
-    cabecalhos['Authorization'] = `Bearer ${token}`;
   }
 
   const resposta = await fetch(`${URL_BASE}${caminho}`, {
@@ -37,20 +31,19 @@ async function requisicao<T>(
     body: corpo !== undefined ? JSON.stringify(corpo) : undefined,
   });
 
-  const dados = await resposta
-    .json()
-    .catch(() => ({
-      sucesso: false,
-      mensagem: 'Resposta inválida do servidor',
-    }));
-
-  if (resposta.status === 401 && autenticado) {
-    limparSessao();
-  }
+  const dados = await resposta.json().catch(() => ({
+    sucesso: false,
+    mensagem: 'Resposta inválida do servidor',
+  }));
 
   if (!resposta.ok) {
+    if (resposta.status === 401) {
+      localStorage.removeItem('medsync_token');
+      localStorage.removeItem('medsync_usuario');
+    }
+
     throw new Error(
-      dados?.mensagem || `Erro ${resposta.status}`
+      dados?.mensagem || `Erro HTTP ${resposta.status}`
     );
   }
 
@@ -114,9 +107,12 @@ export const api = {
         dados
       ),
 
-    esqueciSenha: (email: string) =>
+    esqueciSenha: (
+      email: string
+    ) =>
       requisicao<{
         sucesso: boolean;
+        mensagem: string;
         tokenDesenvolvimento?: string;
       }>(
         'POST',
@@ -131,13 +127,11 @@ export const api = {
     ) =>
       requisicao<{
         sucesso: boolean;
+        mensagem: string;
       }>(
         'POST',
         '/auth/redefinir-senha',
-        {
-          token,
-          novaSenha,
-        },
+        { token, novaSenha },
         false
       ),
   },
@@ -152,7 +146,9 @@ export const api = {
         '/usuarios'
       ),
 
-    buscarPorId: (id: string) =>
+    buscarPorId: (
+      id: string
+    ) =>
       requisicao<{
         usuario: any;
       }>(
@@ -171,16 +167,20 @@ export const api = {
         '/medicamentos'
       ),
 
-    buscar: (id: string) =>
+    buscar: (
+      id: string
+    ) =>
       requisicao<{
         sucesso: boolean;
         dados: any;
       }>(
         'GET',
-        `/medicamentos/${encodeURIComponent(id)}`
+        `/medicamentos/${id}`
       ),
 
-    criar: (dados: any) =>
+    criar: (
+      dados: any
+    ) =>
       requisicao<{
         sucesso: boolean;
         dados: any;
@@ -199,36 +199,45 @@ export const api = {
         dados: any;
       }>(
         'PUT',
-        `/medicamentos/${encodeURIComponent(id)}`,
+        `/medicamentos/${id}`,
         dados
       ),
 
-    excluir: (id: string) =>
+    excluir: (
+      id: string
+    ) =>
       requisicao<{
         sucesso: boolean;
+        mensagem: string;
       }>(
         'DELETE',
-        `/medicamentos/${encodeURIComponent(id)}`
+        `/medicamentos/${id}`
       ),
 
-    alternar: (id: string) =>
+    alternar: (
+      id: string
+    ) =>
       requisicao<{
         sucesso: boolean;
         dados: any;
       }>(
         'PATCH',
-        `/medicamentos/${encodeURIComponent(id)}/alternar`
+        `/medicamentos/${id}/alternar`
       ),
   },
 
   registros: {
-    listar: (dias?: number) =>
+    listar: (
+      dias?: number
+    ) =>
       requisicao<{
         sucesso: boolean;
         dados: any[];
       }>(
         'GET',
-        `/registros${dias ? `?dias=${dias}` : ''}`
+        dias
+          ? `/registros?dias=${dias}`
+          : '/registros'
       ),
 
     hoje: () =>
