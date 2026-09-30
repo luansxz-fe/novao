@@ -1,7 +1,6 @@
-const URL_BASE = (
-  import.meta.env.VITE_API_URL ||
-  'http://localhost:3001/api'
-).replace(/\/+$/, '');
+const URL_BASE =
+  (import.meta as any).env?.VITE_API_URL ||
+  'https://medsync-backend-oqms.onrender.com/api';
 
 function obterToken(): string | null {
   return localStorage.getItem('medsync_token');
@@ -31,19 +30,16 @@ async function requisicao<T>(
     body: corpo !== undefined ? JSON.stringify(corpo) : undefined,
   });
 
-  const dados = await resposta.json().catch(() => ({
-    sucesso: false,
-    mensagem: 'Resposta inválida do servidor',
-  }));
+  const dados = await resposta
+    .json()
+    .catch(() => ({
+      sucesso: false,
+      mensagem: 'Erro de comunicação com o servidor',
+    }));
 
   if (!resposta.ok) {
-    if (resposta.status === 401) {
-      localStorage.removeItem('medsync_token');
-      localStorage.removeItem('medsync_usuario');
-    }
-
     throw new Error(
-      dados?.mensagem || `Erro HTTP ${resposta.status}`
+      dados?.mensagem || `Erro ${resposta.status}`
     );
   }
 
@@ -52,54 +48,48 @@ async function requisicao<T>(
 
 export const api = {
   auth: {
-    registrar: (
-      nome: string,
-      email: string,
-      senha: string
-    ) =>
+    registrar: (nome: string, email: string, senha: string) =>
       requisicao<{
-        sucesso: boolean;
         token: string;
         usuario: any;
       }>(
         'POST',
         '/auth/registrar',
-        { nome, email, senha },
+        {
+          nome,
+          email,
+          senha,
+        },
         false
       ),
 
-    login: (
-      email: string,
-      senha: string
-    ) =>
+    login: (email: string, senha: string) =>
       requisicao<{
-        sucesso: boolean;
         token: string;
         usuario: any;
       }>(
         'POST',
         '/auth/login',
-        { email, senha },
+        {
+          email,
+          senha,
+        },
         false
       ),
 
     eu: () =>
       requisicao<{
-        sucesso: boolean;
         usuario: any;
       }>(
         'GET',
         '/auth/eu'
       ),
 
-    atualizarEu: (
-      dados: {
-        nome?: string;
-        avatar?: string;
-      }
-    ) =>
+    atualizarEu: (dados: {
+      nome?: string;
+      avatar?: string;
+    }) =>
       requisicao<{
-        sucesso: boolean;
         usuario: any;
       }>(
         'PUT',
@@ -107,17 +97,15 @@ export const api = {
         dados
       ),
 
-    esqueciSenha: (
-      email: string
-    ) =>
+    esqueciSenha: (email: string) =>
       requisicao<{
-        sucesso: boolean;
-        mensagem: string;
         tokenDesenvolvimento?: string;
       }>(
         'POST',
         '/auth/esqueci-senha',
-        { email },
+        {
+          email,
+        },
         false
       ),
 
@@ -125,13 +113,13 @@ export const api = {
       token: string,
       novaSenha: string
     ) =>
-      requisicao<{
-        sucesso: boolean;
-        mensagem: string;
-      }>(
+      requisicao<{}>(
         'POST',
         '/auth/redefinir-senha',
-        { token, novaSenha },
+        {
+          token,
+          novaSenha,
+        },
         false
       ),
   },
@@ -146,9 +134,7 @@ export const api = {
         '/usuarios'
       ),
 
-    buscarPorId: (
-      id: string
-    ) =>
+    buscarPorId: (id: number | string) =>
       requisicao<{
         usuario: any;
       }>(
@@ -160,29 +146,22 @@ export const api = {
   medicamentos: {
     listar: () =>
       requisicao<{
-        sucesso: boolean;
         dados: any[];
       }>(
         'GET',
         '/medicamentos'
       ),
 
-    buscar: (
-      id: string
-    ) =>
+    buscar: (id: number | string) =>
       requisicao<{
-        sucesso: boolean;
         dados: any;
       }>(
         'GET',
         `/medicamentos/${id}`
       ),
 
-    criar: (
-      dados: any
-    ) =>
+    criar: (dados: any) =>
       requisicao<{
-        sucesso: boolean;
         dados: any;
       }>(
         'POST',
@@ -191,11 +170,10 @@ export const api = {
       ),
 
     atualizar: (
-      id: string,
+      id: number | string,
       dados: any
     ) =>
       requisicao<{
-        sucesso: boolean;
         dados: any;
       }>(
         'PUT',
@@ -203,22 +181,14 @@ export const api = {
         dados
       ),
 
-    excluir: (
-      id: string
-    ) =>
-      requisicao<{
-        sucesso: boolean;
-        mensagem: string;
-      }>(
+    excluir: (id: number | string) =>
+      requisicao<{}>(
         'DELETE',
         `/medicamentos/${id}`
       ),
 
-    alternar: (
-      id: string
-    ) =>
+    alternar: (id: number | string) =>
       requisicao<{
-        sucesso: boolean;
         dados: any;
       }>(
         'PATCH',
@@ -227,22 +197,16 @@ export const api = {
   },
 
   registros: {
-    listar: (
-      dias?: number
-    ) =>
+    listar: (dias?: number) =>
       requisicao<{
-        sucesso: boolean;
         dados: any[];
       }>(
         'GET',
-        dias
-          ? `/registros?dias=${dias}`
-          : '/registros'
+        `/registros${dias ? `?dias=${dias}` : ''}`
       ),
 
     hoje: () =>
       requisicao<{
-        sucesso: boolean;
         dados: any[];
       }>(
         'GET',
@@ -251,7 +215,6 @@ export const api = {
 
     adesao: () =>
       requisicao<{
-        sucesso: boolean;
         dados: {
           dias7: number;
           dias30: number;
@@ -262,13 +225,12 @@ export const api = {
       ),
 
     salvar: (
-      medicamentoId: string,
+      medicamentoId: number | string,
       horarioAgendado: string,
       situacao: string,
       observacao?: string
     ) =>
       requisicao<{
-        sucesso: boolean;
         dados: any;
       }>(
         'POST',
