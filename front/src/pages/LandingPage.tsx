@@ -10,7 +10,6 @@ export default function LandingPage({ navigate }: Props) {
 
   return (
     <div className="landing">
-      {/* Navbar */}
       <nav className="landing-nav">
         <Logo size="md" />
         <div className="landing-nav__links">
@@ -23,7 +22,6 @@ export default function LandingPage({ navigate }: Props) {
         <button className="landing-nav__mobile-menu" onClick={() => navigate('login')}>Entrar</button>
       </nav>
 
-      {/* Hero */}
       <section className="landing-hero">
         <div className="landing-hero__content">
           <div className="landing-hero__badge">🏥 Saúde digital simplificada</div>
@@ -91,7 +89,6 @@ export default function LandingPage({ navigate }: Props) {
         </div>
       </section>
 
-      {/* Features */}
       <section id="features" className="landing-section">
         <div className="section-label">Recursos</div>
         <h2 className="section-title">Tudo que você precisa para<br/>cuidar da sua saúde</h2>
@@ -113,7 +110,6 @@ export default function LandingPage({ navigate }: Props) {
         </div>
       </section>
 
-      {/* How it works */}
       <section id="how" className="landing-section landing-section--alt">
         <div className="section-label">Como funciona</div>
         <h2 className="section-title">Comece em 3 passos simples</h2>
@@ -132,7 +128,6 @@ export default function LandingPage({ navigate }: Props) {
         </div>
       </section>
 
-      {/* CTA */}
       <section className="landing-cta">
         <h2>Comece a cuidar da sua saúde hoje</h2>
         <p>Junte-se a milhares de pessoas que já confiam no MedSync</p>
@@ -141,10 +136,9 @@ export default function LandingPage({ navigate }: Props) {
         </button>
       </section>
 
-      {/* Footer */}
       <footer className="landing-footer">
         <Logo size="sm" />
-        <p>© 2025 MedSync. Feito com ❤️ para sua saúde.</p>
+        <p>© 2025 MedSync. Feito com cuidado para sua saúde.</p>
         <div className="landing-footer__links">
           <a href="#">Privacidade</a>
           <a href="#">Termos</a>

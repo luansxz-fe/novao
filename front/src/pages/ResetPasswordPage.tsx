@@ -60,7 +60,7 @@ export default function ResetPasswordPage({ navigate, token }: Props) {
                     onChange={e => setNovaSenha(e.target.value)}
                   />
                   <button type="button" className="input-eye" onClick={() => setMostrarSenha(!mostrarSenha)}>
-                    {mostrarSenha ? '🙈' : '👁️'}
+                    {mostrarSenha ? '🔓' : '🔒'}
                   </button>
                 </div>
               </div>

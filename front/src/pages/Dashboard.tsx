@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useMed } from '../context/MedContext';
 import { Page } from '../components/AppRouter';
@@ -10,17 +10,56 @@ const DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 export default function Dashboard({ navigate }: Props) {
   const { user } = useAuth();
-  const { getTodayMedications, getUpcomingDoses, getAdherenceRate, medications, logs, logDose } = useMed();
+  const { getTodayMedications, getAdherenceRate, medications, logs, logDose } = useMed();
   const [showAddModal, setShowAddModal] = useState(false);
   const [noteModal, setNoteModal] = useState<{id: string; time: string} | null>(null);
   const [noteText, setNoteText] = useState('');
 
   const today = getTodayMedications();
-  const upcoming = getUpcomingDoses();
+
+  // Verifica se o horário agendado já venceu
+  const isTimePassed = (timeStr: string) => {
+    const [h, m] = timeStr.split(':').map(Number);
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const scheduledMinutes = h * 60 + m;
+    return currentMinutes > scheduledMinutes;
+  };
+
+  // 🚨 AUTO-REGISTRO DE DOSES PERDIDAS
+  // Sempre que o horário passar sem ação do usuário, salva automaticamente como 'missed' (PERDIDO)
+  useEffect(() => {
+    const checkMissedDoses = () => {
+      today.forEach(({ medication, log, scheduledTime }) => {
+        if (!log && isTimePassed(scheduledTime)) {
+          logDose(medication.id, scheduledTime, 'missed');
+        }
+      });
+    };
+
+    checkMissedDoses();
+    const interval = setInterval(checkMissedDoses, 30000); // Executa a cada 30 segundos
+    return () => clearInterval(interval);
+  }, [today, logDose]);
+
   const adherence7 = getAdherenceRate(7);
   const adherence30 = getAdherenceRate(30);
-  const todayTaken = today.filter(t => t.log?.status === 'taken').length;
+
+  // Define o status real da dose
+  const getDoseStatus = (log: any, scheduledTime: string) => {
+    if (log?.status === 'taken') return 'taken';
+    if (log?.status === 'skipped') return 'skipped';
+    if (log?.status === 'missed') return 'missed';
+    if (isTimePassed(scheduledTime)) return 'missed';
+    return 'pending';
+  };
+
+  // Doses pendentes do dia (só exibe as que ainda NÃO venceram)
+  const upcoming = today.filter(({ log, scheduledTime }) => getDoseStatus(log, scheduledTime) === 'pending');
+
+  const todayTaken = today.filter(t => getDoseStatus(t.log, t.scheduledTime) === 'taken').length;
   const todayTotal = today.length;
+  
   const activeMeds = medications.filter(m => m.active).length;
   const lowStock = medications.filter(m => m.active && m.stock <= 5).length;
 
@@ -29,7 +68,8 @@ export default function Dashboard({ navigate }: Props) {
   const greeting = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite';
 
   const weekDays = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(); d.setDate(d.getDate() - 6 + i);
+    const d = new Date(); 
+    d.setDate(d.getDate() - 6 + i);
     const dateStr = d.toISOString().split('T')[0];
     const dayLogs = logs.filter(l => l.date === dateStr);
     const taken = dayLogs.filter(l => l.status === 'taken').length;
@@ -51,34 +91,43 @@ export default function Dashboard({ navigate }: Props) {
       <div className="dashboard__header">
         <div>
           <h1>{greeting}, {user?.name?.split(' ')[0]}! 👋</h1>
-          <p className="dashboard__date">{now.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+          <p className="dashboard__date">
+            {now.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+          </p>
         </div>
         <button className="btn btn--primary" onClick={() => setShowAddModal(true)}>
           + Adicionar medicamento
         </button>
       </div>
 
-      {/* Stats */}
+      {/* Cards de Estatísticas */}
       <div className="stats-row">
         <div className="stat-card stat-card--blue">
           <div className="stat-card__icon">💊</div>
           <div className="stat-card__value">{todayTaken}/{todayTotal}</div>
           <div className="stat-card__label">Doses hoje</div>
           {todayTotal > 0 && (
-            <div className="stat-card__bar"><div className="stat-card__bar-fill" style={{ width: `${(todayTaken/todayTotal)*100}%`, background:'#fff' }} /></div>
+            <div className="stat-card__bar">
+              <div className="stat-card__bar-fill" style={{ width: `${(todayTaken/todayTotal)*100}%`, background:'#fff' }} />
+            </div>
           )}
         </div>
-        <div className="stat-card stat-card--green">
+
+        <div className={`stat-card ${adherence7 < 50 ? 'stat-card--orange' : 'stat-card--green'}`}>
           <div className="stat-card__icon">📈</div>
           <div className="stat-card__value">{adherence7}%</div>
           <div className="stat-card__label">Adesão 7 dias</div>
-          <div className="stat-card__bar"><div className="stat-card__bar-fill" style={{ width:`${adherence7}%`, background:'#fff' }} /></div>
+          <div className="stat-card__bar">
+            <div className="stat-card__bar-fill" style={{ width:`${adherence7}%`, background:'#fff' }} />
+          </div>
         </div>
+
         <div className="stat-card stat-card--purple">
           <div className="stat-card__icon">🗂️</div>
           <div className="stat-card__value">{activeMeds}</div>
           <div className="stat-card__label">Medicamentos ativos</div>
         </div>
+
         <div className={`stat-card ${lowStock > 0 ? 'stat-card--orange' : 'stat-card--teal'}`}>
           <div className="stat-card__icon">{lowStock > 0 ? '⚠️' : '✅'}</div>
           <div className="stat-card__value">{lowStock > 0 ? lowStock : adherence30 + '%'}</div>
@@ -87,7 +136,7 @@ export default function Dashboard({ navigate }: Props) {
       </div>
 
       <div className="dashboard__grid">
-        {/* Today's medications */}
+        {/* Lista Principal de Medicamentos de Hoje */}
         <div className="card">
           <div className="card__header">
             <h2>Medicamentos de hoje</h2>
@@ -101,49 +150,53 @@ export default function Dashboard({ navigate }: Props) {
             </div>
           ) : (
             <div className="med-list">
-              {today.map(({ medication, log, scheduledTime }) => (
-                <div key={`${medication.id}-${scheduledTime}`} className={`med-item ${log?.status === 'taken' ? 'med-item--taken' : ''}`}>
-                  {medication.imageUrl ? (
-                    <img src={medication.imageUrl} alt={medication.name} className="med-item__img"
-                      onError={e => { (e.target as HTMLImageElement).style.display='none'; }} />
-                  ) : (
-                    <div className="med-item__color" style={{ background: medication.color }} />
-                  )}
-                  <div className="med-item__info">
-                    <span className="med-item__name">{medication.name}</span>
-                    <span className="med-item__detail">{medication.dosage} {medication.unit} • {scheduledTime}</span>
-                    {log?.notes && <span className="med-item__note">💬 {log.notes}</span>}
-                  </div>
-                  <div className="med-item__actions">
-                    {log?.status === 'taken' ? (
-                      <span className="badge badge--success">✓ Tomado</span>
-                    ) : log?.status === 'missed' ? (
-                      <span className="badge badge--danger">✕ Perdido</span>
-                    ) : log?.status === 'skipped' ? (
-                      <span className="badge badge--warning">— Pulado</span>
+              {today.map(({ medication, log, scheduledTime }) => {
+                const status = getDoseStatus(log, scheduledTime);
+
+                return (
+                  <div key={`${medication.id}-${scheduledTime}`} className={`med-item ${status === 'taken' ? 'med-item--taken' : ''}`}>
+                    {medication.imageUrl ? (
+                      <img src={medication.imageUrl} alt={medication.name} className="med-item__img"
+                        onError={e => { (e.target as HTMLImageElement).style.display='none'; }} />
                     ) : (
-                      <div className="med-item__btn-group">
-                        <button className="btn btn--success btn--xs" onClick={() => setNoteModal({ id: medication.id, time: scheduledTime })}>✓ Tomar</button>
-                        <button className="btn btn--ghost btn--xs" onClick={() => logDose(medication.id, scheduledTime, 'skipped')}>Pular</button>
-                      </div>
+                      <div className="med-item__color" style={{ background: medication.color }} />
                     )}
+                    <div className="med-item__info">
+                      <span className="med-item__name">{medication.name}</span>
+                      <span className="med-item__detail">{medication.dosage} {medication.unit} • {scheduledTime}</span>
+                      {log?.notes && <span className="med-item__note">💬 {log.notes}</span>}
+                    </div>
+                    <div className="med-item__actions">
+                      {status === 'taken' ? (
+                        <span className="badge badge--success">✓ Tomado</span>
+                      ) : status === 'skipped' ? (
+                        <span className="badge badge--warning">— Pulado</span>
+                      ) : status === 'missed' ? (
+                        <span className="badge badge--danger">✕ Perdido</span>
+                      ) : (
+                        <div className="med-item__btn-group">
+                          <button className="btn btn--success btn--xs" onClick={() => setNoteModal({ id: medication.id, time: scheduledTime })}>✓ Tomar</button>
+                          <button className="btn btn--ghost btn--xs" onClick={() => logDose(medication.id, scheduledTime, 'skipped')}>Pular</button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
 
-        {/* Right column */}
+        {/* Coluna Direita */}
         <div className="dashboard__right">
-          {/* Upcoming */}
+          {/* Próximas Doses */}
           <div className="card">
             <div className="card__header"><h2>Próximas doses</h2></div>
             {upcoming.length === 0 ? (
               <p className="text-muted" style={{ fontSize: 13 }}>Nenhuma dose pendente para hoje. 🎉</p>
             ) : (
               <div className="upcoming-list">
-                {upcoming.map(({ medication, time }, i) => (
+                {upcoming.map(({ medication, scheduledTime }, i) => (
                   <div key={i} className="upcoming-item">
                     {medication.imageUrl ? (
                       <img src={medication.imageUrl} alt={medication.name} className="upcoming-item__img"
@@ -155,14 +208,14 @@ export default function Dashboard({ navigate }: Props) {
                       <span>{medication.name}</span>
                       <span className="text-muted">{medication.dosage} {medication.unit}</span>
                     </div>
-                    <span className="upcoming-item__time">{time}</span>
+                    <span className="upcoming-item__time">{scheduledTime}</span>
                   </div>
                 ))}
               </div>
             )}
           </div>
 
-          {/* Week overview */}
+          {/* Adesão da Semana */}
           <div className="card">
             <div className="card__header"><h2>Adesão da semana</h2></div>
             <div className="week-overview">
@@ -183,28 +236,7 @@ export default function Dashboard({ navigate }: Props) {
             </div>
           </div>
 
-          {/* Low stock alerts */}
-          {medications.some(m => m.stock <= 5 && m.active) && (
-            <div className="card card--alert">
-              <div className="card__header"><h2>⚠️ Estoque baixo</h2></div>
-              <div className="stock-alerts">
-                {medications.filter(m => m.stock <= 5 && m.active).map(med => (
-                  <div key={med.id} className="stock-alert-item">
-                    {med.imageUrl ? (
-                      <img src={med.imageUrl} alt={med.name} className="stock-alert-img"
-                        onError={e => { (e.target as HTMLImageElement).style.display='none'; }} />
-                    ) : (
-                      <div className="stock-alert-dot" style={{ background: med.color }} />
-                    )}
-                    <span>{med.name}</span>
-                    <span className="badge badge--danger">{med.stock} restantes</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Quick stats */}
+          {/* Resumo Geral */}
           <div className="card">
             <div className="card__header"><h2>Resumo geral</h2></div>
             <div className="quick-stats">
@@ -214,11 +246,21 @@ export default function Dashboard({ navigate }: Props) {
               </div>
               <div className="quick-stat">
                 <span>Doses tomadas</span>
-                <strong style={{ color: 'var(--success)' }}>{logs.filter(l=>l.status==='taken').length}</strong>
+                <strong style={{ color: 'var(--success)' }}>
+                  {logs.filter(l => l.status === 'taken').length}
+                </strong>
+              </div>
+              <div className="quick-stat">
+                <span>Doses puladas</span>
+                <strong style={{ color: 'var(--warning, #f59e0b)' }}>
+                  {logs.filter(l => l.status === 'skipped').length}
+                </strong>
               </div>
               <div className="quick-stat">
                 <span>Doses perdidas</span>
-                <strong style={{ color: 'var(--danger)' }}>{logs.filter(l=>l.status==='missed').length}</strong>
+                <strong style={{ color: 'var(--danger)' }}>
+                  {logs.filter(l => l.status === 'missed').length}
+                </strong>
               </div>
               <div className="quick-stat">
                 <span>Adesão 30 dias</span>
@@ -229,7 +271,7 @@ export default function Dashboard({ navigate }: Props) {
         </div>
       </div>
 
-      {/* Take dose with note modal */}
+      {/* Modal Tomar Dose */}
       {noteModal && (
         <div className="modal-overlay" onClick={() => setNoteModal(null)}>
           <div className="modal modal--sm" onClick={e => e.stopPropagation()}>

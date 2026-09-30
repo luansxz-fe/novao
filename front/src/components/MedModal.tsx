@@ -37,20 +37,16 @@ export default function MedModal({ medication, onClose }: Props) {
   const [prescribedBy,    setPrescribedBy]    = useState(medication?.prescribedBy    || '');
   const [sideEffects,     setSideEffects]     = useState(medication?.sideEffects     || '');
 
-  /* ── image URL state ── */
   const [imageUrl,  setImageUrl]  = useState(medication?.imageUrl || '');
   const [imgStatus, setImgStatus] = useState<ImgStatus>(() =>
     medication?.imageUrl ? 'loading' : 'empty'
   );
 
-  /* ── step / validation ── */
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [step,   setStep]   = useState(1);
 
-  /* debounce timer ref */
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  /* ── Auto-load image whenever imageUrl changes ── */
   useEffect(() => {
     const trimmed = imageUrl.trim();
     if (!trimmed) { setImgStatus('empty'); return; }
@@ -63,7 +59,7 @@ export default function MedModal({ medication, onClose }: Props) {
       img.onload  = () => setImgStatus('ok');
       img.onerror = () => setImgStatus('error');
       img.src     = trimmed;
-    }, 600); // 600 ms debounce after user stops typing
+    }, 600); 
 
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [imageUrl]);
@@ -103,7 +99,6 @@ export default function MedModal({ medication, onClose }: Props) {
 
   const STEP_LABELS = ['Básico', 'Horários & Estoque', 'Imagem & Detalhes'];
 
-  /* ── image section helper ── */
   const renderImageSection = () => (
     <div className="form-group">
       <label>🖼️ Foto do medicamento (URL)</label>
@@ -128,7 +123,6 @@ export default function MedModal({ medication, onClose }: Props) {
         Cole a URL direta de uma imagem (.jpg, .png, .webp). A pré-visualização carrega automaticamente.
       </p>
 
-      {/* Status feedback */}
       {imgStatus === 'loading' && imageUrl && (
         <div className="img-status img-status--loading">
           <span className="img-spinner" /> Carregando imagem…
@@ -152,7 +146,6 @@ export default function MedModal({ medication, onClose }: Props) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal modal--lg" onClick={e => e.stopPropagation()}>
 
-        {/* Header */}
         <div className="modal__header">
           <div className="modal__header-inner">
             {imgStatus === 'ok' ? (
@@ -168,7 +161,6 @@ export default function MedModal({ medication, onClose }: Props) {
           <button className="modal__close" onClick={onClose}>✕</button>
         </div>
 
-        {/* Steps indicator */}
         <div className="steps-indicator">
           {[1, 2, 3].map(s => (
             <div key={s} className={`step-dot ${step >= s ? 'step-dot--active' : ''} ${step === s ? 'step-dot--current' : ''}`}>
@@ -178,10 +170,8 @@ export default function MedModal({ medication, onClose }: Props) {
           ))}
         </div>
 
-        {/* Body */}
         <div className="modal__body">
 
-          {/* ──── STEP 1: Basic info ──── */}
           {step === 1 && (
             <div className="modal-step">
               <div className="form-group">
@@ -247,7 +237,6 @@ export default function MedModal({ medication, onClose }: Props) {
             </div>
           )}
 
-          {/* ──── STEP 2: Schedule & Stock ──── */}
           {step === 2 && (
             <div className="modal-step">
               <div className="form-group">
@@ -310,7 +299,6 @@ export default function MedModal({ medication, onClose }: Props) {
                 </div>
               </div>
 
-              {/* Live stock bar */}
               <div className="stock-bar-preview">
                 <div className="stock-bar-preview__label">
                   <span>Nível de estoque: {stock} / {stockMax} unidades</span>
@@ -326,11 +314,9 @@ export default function MedModal({ medication, onClose }: Props) {
             </div>
           )}
 
-          {/* ──── STEP 3: Image & Details ──── */}
           {step === 3 && (
             <div className="modal-step">
 
-              {/* IMAGE URL – the main feature */}
               {renderImageSection()}
 
               <div className="form-group">
@@ -359,7 +345,6 @@ export default function MedModal({ medication, onClose }: Props) {
                 <p className="form-hint">Receba alertas nos horários configurados.</p>
               </div>
 
-              {/* Final preview */}
               <div className="med-preview-card">
                 <div className="med-preview-card__accent" style={{ background: color }} />
                 {imgStatus === 'ok' ? (

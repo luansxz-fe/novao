@@ -1,81 +1,124 @@
-const pool = require('../config/database');
+const mongoose = require('mongoose');
+
+const medicamentoSchema = new mongoose.Schema(
+  {
+    usuario_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Usuario',
+      required: true,
+    },
+    nome: { type: String, required: true, trim: true },
+    dosagem: { type: String, required: true },
+    unidade: { type: String, required: true },
+    frequencia: { type: String, required: true },
+    horarios: { type: [String], default: [] },
+    data_inicio: { type: Date, required: true },
+    data_termino: { type: Date, default: null },
+    instrucoes: { type: String, default: null },
+    cor: { type: String, required: true },
+    icone: { type: String, required: true },
+    categoria: { type: String, required: true },
+    estoque_atual: { type: Number, default: 30 },
+    estoque_maximo: { type: Number, default: 30 },
+    lembrete_ativo: { type: Boolean, default: true },
+    ativo: { type: Boolean, default: true },
+    url_imagem: { type: String, default: null },
+    medico_prescritor: { type: String, default: null },
+    efeitos_colaterais: { type: String, default: null },
+  },
+  {
+    timestamps: { createdAt: 'criado_em', updatedAt: 'atualizado_em' },
+  }
+);
+
+const Medicamento = mongoose.model('Medicamento', medicamentoSchema);
 
 const MedicamentoModel = {
+  formatar(doc) {
+    if (!doc) return null;
 
-  formatar(linha) {
-    if (!linha) return null;
-    const formatarData = (valor) => valor instanceof Date ? valor.toISOString().split('T')[0] : valor;
+    const formatarData = (valor) => {
+      if (!valor) return null;
+      if (valor instanceof Date) return valor.toISOString().split('T')[0];
+      return valor;
+    };
+
     return {
-      id: linha.id,
-      usuarioId: linha.usuario_id,
-      nome: linha.nome,
-      dosagem: linha.dosagem,
-      unidade: linha.unidade,
-      frequencia: linha.frequencia,
-      horarios: typeof linha.horarios === 'string' ? JSON.parse(linha.horarios) : (linha.horarios || []),
-      dataInicio: formatarData(linha.data_inicio),
-      dataTermino: linha.data_termino ? formatarData(linha.data_termino) : null,
-      instrucoes: linha.instrucoes || null,
-      cor: linha.cor,
-      icone: linha.icone,
-      categoria: linha.categoria,
-      estoqueAtual: linha.estoque_atual,
-      estoqueMaximo: linha.estoque_maximo,
-      lembreteAtivo: !!linha.lembrete_ativo,
-      ativo: !!linha.ativo,
-      urlImagem: linha.url_imagem || null,
-      medicoPrescritor: linha.medico_prescritor || null,
-      efeitosColaterais: linha.efeitos_colaterais || null,
-      criadoEm: linha.criado_em instanceof Date ? linha.criado_em.toISOString() : linha.criado_em,
+      id: doc._id ? doc._id.toString() : doc.id,
+      usuarioId: doc.usuario_id ? doc.usuario_id.toString() : doc.usuarioId,
+      nome: doc.nome,
+      dosagem: doc.dosagem,
+      unidade: doc.unidade,
+      frequencia: doc.frequencia,
+      horarios: Array.isArray(doc.horarios) ? doc.horarios : [],
+      dataInicio: formatarData(doc.data_inicio),
+      dataTermino: formatarData(doc.data_termino),
+      instrucoes: doc.instrucoes || null,
+      cor: doc.cor,
+      icone: doc.icone,
+      categoria: doc.categoria,
+      estoqueAtual: doc.estoque_atual,
+      estoqueMaximo: doc.estoque_maximo,
+      lembreteAtivo: !!doc.lembrete_ativo,
+      ativo: !!doc.ativo,
+      urlImagem: doc.url_imagem || null,
+      medicoPrescritor: doc.medico_prescritor || null,
+      efeitosColaterais: doc.efeitos_colaterais || null,
+      criadoEm: doc.criado_em instanceof Date ? doc.criado_em.toISOString() : doc.criado_em,
     };
   },
 
   async listarPorUsuario(usuarioId) {
-    const [linhas] = await pool.query(
-      'SELECT * FROM medicamentos WHERE usuario_id = ? ORDER BY criado_em DESC',
-      [usuarioId]
-    );
-    return linhas.map(this.formatar.bind(this));
+    if (!mongoose.Types.ObjectId.isValid(usuarioId)) return [];
+
+    const documentos = await Medicamento.find({ usuario_id: usuarioId }).sort({ criado_em: -1 });
+    return documentos.map((doc) => this.formatar(doc));
   },
 
   async buscarUm(id, usuarioId) {
-    const [linhas] = await pool.query(
-      'SELECT * FROM medicamentos WHERE id = ? AND usuario_id = ? LIMIT 1',
-      [id, usuarioId]
-    );
-    return this.formatar(linhas[0]);
+    if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(usuarioId)) {
+      return null;
+    }
+
+    const doc = await Medicamento.findOne({ _id: id, usuario_id: usuarioId });
+    return this.formatar(doc);
   },
 
   async criar(usuarioId, dados) {
-    const [resultado] = await pool.query(
-      `INSERT INTO medicamentos
-         (usuario_id, nome, dosagem, unidade, frequencia, horarios,
-          data_inicio, data_termino, instrucoes, cor, icone, categoria,
-          estoque_atual, estoque_maximo, lembrete_ativo, ativo,
-          url_imagem, medico_prescritor, efeitos_colaterais)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [
-        usuarioId,
-        dados.nome, dados.dosagem, dados.unidade, dados.frequencia,
-        JSON.stringify(dados.horarios),
-        dados.dataInicio,
-        dados.dataTermino || null,
-        dados.instrucoes || null,
-        dados.cor, dados.icone, dados.categoria,
-        dados.estoqueAtual ?? 30,
-        dados.estoqueMaximo ?? 30,
-        dados.lembreteAtivo ? 1 : 0,
-        dados.ativo !== false ? 1 : 0,
-        dados.urlImagem || null,
-        dados.medicoPrescritor || null,
-        dados.efeitosColaterais || null,
-      ]
-    );
-    return this.buscarUm(resultado.insertId, usuarioId);
+    if (!mongoose.Types.ObjectId.isValid(usuarioId)) return null;
+
+    const novoMedicamento = new Medicamento({
+      usuario_id: usuarioId,
+      nome: dados.nome,
+      dosagem: dados.dosagem,
+      unidade: dados.unidade,
+      frequencia: dados.frequencia,
+      horarios: Array.isArray(dados.horarios) ? dados.horarios : [],
+      data_inicio: dados.dataInicio,
+      data_termino: dados.dataTermino || null,
+      instrucoes: dados.instrucoes || null,
+      cor: dados.cor,
+      icone: dados.icone,
+      categoria: dados.categoria,
+      estoque_atual: dados.estoqueAtual ?? 30,
+      estoque_maximo: dados.estoqueMaximo ?? 30,
+      lembrete_ativo: dados.lembreteAtivo !== undefined ? !!dados.lembreteAtivo : true,
+      ativo: dados.ativo !== false,
+      url_imagem: dados.urlImagem || null,
+      medico_prescritor: dados.medicoPrescritor || null,
+      efeitos_colaterais: dados.efeitosColaterais || null,
+    });
+
+    const salvo = await novoMedicamento.save();
+    return this.formatar(salvo);
   },
 
   async atualizar(id, usuarioId, dados) {
-    const mapaColunas = {
+    if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(usuarioId)) {
+      return null;
+    }
+
+    const mapaCampos = {
       nome: 'nome',
       dosagem: 'dosagem',
       unidade: 'unidade',
@@ -96,36 +139,35 @@ const MedicamentoModel = {
       efeitosColaterais: 'efeitos_colaterais',
     };
 
-    const colunas = [];
-    const valores = [];
+    const atualizacao = {};
 
-    for (const [chave, coluna] of Object.entries(mapaColunas)) {
+    for (const [chave, campoDoc] of Object.entries(mapaCampos)) {
       if (dados[chave] === undefined) continue;
-      colunas.push(`${coluna} = ?`);
       let valor = dados[chave];
-      if (chave === 'horarios') valor = JSON.stringify(valor);
-      if (chave === 'lembreteAtivo') valor = valor ? 1 : 0;
-      if (chave === 'ativo') valor = valor ? 1 : 0;
       if (valor === '') valor = null;
-      valores.push(valor);
+      atualizacao[campoDoc] = valor;
     }
 
-    if (!colunas.length) return this.buscarUm(id, usuarioId);
+    if (Object.keys(atualizacao).length === 0) {
+      return this.buscarUm(id, usuarioId);
+    }
 
-    valores.push(id, usuarioId);
-    await pool.query(
-      `UPDATE medicamentos SET ${colunas.join(', ')} WHERE id = ? AND usuario_id = ?`,
-      valores
+    const docAtualizado = await Medicamento.findOneAndUpdate(
+      { _id: id, usuario_id: usuarioId },
+      { $set: atualizacao },
+      { new: true }
     );
-    return this.buscarUm(id, usuarioId);
+
+    return this.formatar(docAtualizado);
   },
 
   async excluir(id, usuarioId) {
-    const [resultado] = await pool.query(
-      'DELETE FROM medicamentos WHERE id = ? AND usuario_id = ?',
-      [id, usuarioId]
-    );
-    return resultado.affectedRows > 0;
+    if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(usuarioId)) {
+      return false;
+    }
+
+    const resultado = await Medicamento.deleteOne({ _id: id, usuario_id: usuarioId });
+    return resultado.deletedCount > 0;
   },
 };
 

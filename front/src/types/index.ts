@@ -1,52 +1,39 @@
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  avatar?: string;
-  createdAt: string;
-}
-
 export interface Medication {
   id: string;
-  userId: string;
+  _id?: string;
   name: string;
   dosage: string;
   unit: string;
   frequency: string;
   times: string[];
-  startDate: string;
-  endDate?: string;
-  instructions?: string;
-  color: string;
-  icon: string;
-  category: string;
   stock: number;
-  stockMax: number;
-  reminderEnabled: boolean;
+  stockMax?: number;
   active: boolean;
+  color?: string;
+  category?: string;
+  icon?: string;
   imageUrl?: string;
-  notes?: string;
   prescribedBy?: string;
+  startDate?: string;
+  endDate?: string;
+  reminderEnabled?: boolean;
+  instructions?: string;
   sideEffects?: string;
-  createdAt: string;
 }
 
-export interface MedicationLog {
+export interface DoseLog {
+  situacao: string;
   id: string;
+  _id?: string;
   medicationId: string;
-  userId: string;
   scheduledTime: string;
-  takenAt?: string;
-  status: 'pending' | 'taken' | 'missed' | 'skipped';
+  status: 'taken' | 'skipped' | 'missed' | 'TOMADO' | 'PULADO' | 'PERDIDO' | string;
   date: string;
   notes?: string;
 }
 
-export interface Reminder {
-  id: string;
-  medicationId: string;
-  userId: string;
-  time: string;
-  enabled: boolean;
-  days: number[];
+export interface TodayMedicationItem {
+  medication: Medication;
+  scheduledTime: string;
+  log?: DoseLog;
 }

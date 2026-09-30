@@ -4,8 +4,9 @@ const TokenModel = require('../models/TokenModel');
 const { enviarEmailRecuperacao } = require('../services/emailService');
 
 function gerarToken(usuario) {
+  const id = usuario._id ? usuario._id.toString() : usuario.id;
   return jwt.sign(
-    { id: usuario.id, email: usuario.email },
+    { id, email: usuario.email },
     process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
   );
@@ -31,7 +32,9 @@ const AuthController = {
         token,
         usuario: UsuarioModel.formatar(usuario),
       });
-    } catch (erro) { next(erro); }
+    } catch (erro) {
+      next(erro);
+    }
   },
 
   async login(req, res, next) {
@@ -55,7 +58,9 @@ const AuthController = {
         token,
         usuario: UsuarioModel.formatar(usuario),
       });
-    } catch (erro) { next(erro); }
+    } catch (erro) {
+      next(erro);
+    }
   },
 
   async meusDados(req, res) {
@@ -65,9 +70,13 @@ const AuthController = {
   async atualizarMeusDados(req, res, next) {
     try {
       const { nome, avatar } = req.body;
-      const atualizado = await UsuarioModel.atualizar(req.usuario.id, { nome, avatar });
+      const idUsuario = req.usuario._id || req.usuario.id;
+      const atualizado = await UsuarioModel.atualizar(idUsuario, { nome, avatar });
+
       return res.json({ sucesso: true, usuario: UsuarioModel.formatar(atualizado) });
-    } catch (erro) { next(erro); }
+    } catch (erro) {
+      next(erro);
+    }
   },
 
   async esqueciSenha(req, res, next) {
@@ -82,7 +91,8 @@ const AuthController = {
         });
       }
 
-      const token = await TokenModel.criar(usuario.id);
+      const idUsuario = usuario._id || usuario.id;
+      const token = await TokenModel.criar(idUsuario);
 
       try {
         await enviarEmailRecuperacao(usuario.email, usuario.nome, token);
@@ -105,7 +115,9 @@ const AuthController = {
         sucesso: true,
         mensagem: 'Codigo de recuperacao enviado para seu e-mail',
       });
-    } catch (erro) { next(erro); }
+    } catch (erro) {
+      next(erro);
+    }
   },
 
   async redefinirSenha(req, res, next) {
@@ -118,11 +130,15 @@ const AuthController = {
       }
 
       const usuario = await UsuarioModel.buscarPorEmail(registro.email);
-      await UsuarioModel.alterarSenha(usuario.id, novaSenha);
+      const idUsuario = usuario._id || usuario.id;
+
+      await UsuarioModel.alterarSenha(idUsuario, novaSenha);
       await TokenModel.marcarUtilizado(token);
 
       return res.json({ sucesso: true, mensagem: 'Senha redefinida com sucesso' });
-    } catch (erro) { next(erro); }
+    } catch (erro) {
+      next(erro);
+    }
   },
 };
 

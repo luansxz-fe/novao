@@ -1,4 +1,4 @@
-const URL_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+const URL_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001/api';
 
 function obterToken(): string | null {
   return localStorage.getItem('medsync_token');
@@ -55,7 +55,7 @@ export const api = {
     listarTodos: () =>
       requisicao<{ total: number; usuarios: any[] }>('GET', '/usuarios'),
 
-    buscarPorId: (id: number) =>
+    buscarPorId: (id: number | string) =>
       requisicao<{ usuario: any }>('GET', `/usuarios/${id}`),
   },
 
@@ -63,19 +63,19 @@ export const api = {
     listar: () =>
       requisicao<{ dados: any[] }>('GET', '/medicamentos'),
 
-    buscar: (id: number) =>
+    buscar: (id: number | string) =>
       requisicao<{ dados: any }>('GET', `/medicamentos/${id}`),
 
     criar: (dados: any) =>
       requisicao<{ dados: any }>('POST', '/medicamentos', dados),
 
-    atualizar: (id: number, dados: any) =>
+    atualizar: (id: number | string, dados: any) =>
       requisicao<{ dados: any }>('PUT', `/medicamentos/${id}`, dados),
 
-    excluir: (id: number) =>
+    excluir: (id: number | string) =>
       requisicao<{}>('DELETE', `/medicamentos/${id}`),
 
-    alternar: (id: number) =>
+    alternar: (id: number | string) =>
       requisicao<{ dados: any }>('PATCH', `/medicamentos/${id}/alternar`),
   },
 
@@ -89,7 +89,7 @@ export const api = {
     adesao: () =>
       requisicao<{ dados: { dias7: number; dias30: number } }>('GET', '/registros/adesao'),
 
-    salvar: (medicamentoId: number, horarioAgendado: string, situacao: string, observacao?: string) =>
+    salvar: (medicamentoId: number | string, horarioAgendado: string, situacao: string, observacao?: string) =>
       requisicao<{ dados: any }>('POST', '/registros', { medicamentoId, horarioAgendado, situacao, observacao }),
   },
 };

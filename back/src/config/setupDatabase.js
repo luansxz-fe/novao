@@ -1,41 +1,35 @@
 require('dotenv').config();
-const mysql = require('mysql2/promise');
-const fs = require('fs');
-const path = require('path');
+const mongoose = require('mongoose');
 
-const caminhoSchemaExterno = path.join(__dirname, '../../../medsync-database/migrations/001_schema.sql');
-const caminhoSchemaLocal = path.join(__dirname, '../../sql/schema.sql');
+require('../models/UserModel');
+require('../models/TokenModel');
+require('../models/MedicationModel');
+require('../models/LogModel');
 
 async function configurar() {
-  console.log('MedSync - configuração do banco de dados');
+  console.log('MedSync - Configuração e Teste de Banco de Dados (MongoDB)');
 
-  const conexao = await mysql.createConnection({
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '3306'),
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || 'root',
-    multipleStatements: true,
-    charset: 'utf8mb4',
-  });
+  if (!process.env.MONGODB_URI) {
+    console.error('Erro: A variável MONGODB_URI não está definida no .env');
+    process.exit(1);
+  }
 
   try {
-    const arquivoSchema = fs.existsSync(caminhoSchemaExterno) ? caminhoSchemaExterno : caminhoSchemaLocal;
-    const sql = fs.readFileSync(arquivoSchema, 'utf8');
+    console.log('Conectando ao MongoDB...');
+    await mongoose.connect(process.env.MONGODB_URI);
 
-    console.log('Criando banco e tabelas');
-    await conexao.query(sql);
-    console.log('Banco medsync criado');
-    console.log('Tabela usuarios criada');
-    console.log('Tabela tokens_recuperacao_senha criada');
-    console.log('Tabela medicamentos criada');
-    console.log('Tabela registros_doses criada');
-    console.log('Configure o .env, instale as dependências e execute npm run dev');
+    console.log('Conexão estabelecida com sucesso!');
+    console.log('Coleção "usuarios" pronta');
+    console.log('Coleção "tokenrecuperacaos" pronta');
+    console.log('Coleção "medicamentos" pronta');
+    console.log('Coleção "registrodoses" pronta');
+    console.log('\nConfiguração concluída! Execute "npm run dev" para iniciar.');
+
+    await mongoose.disconnect();
+    process.exit(0);
   } catch (erro) {
-    console.error('Erro:', erro.message);
-    if (erro.code === 'ENOENT') console.error('Schema não encontrado, execute a partir da pasta medsync-backend');
+    console.error('Erro ao conectar com o MongoDB:', erro.message);
     process.exit(1);
-  } finally {
-    await conexao.end();
   }
 }
 

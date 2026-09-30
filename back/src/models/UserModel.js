@@ -1,47 +1,83 @@
-const pool = require('../config/database');
+const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
-const UsuarioModel = {
+const usuarioSchema = new mongoose.Schema(
+  {
+    nome: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+    },
+    senha: {
+      type: String,
+      required: true,
+    },
+    avatar: {
+      type: String,
+      default: null,
+    },
+    resetPasswordToken: {
+      type: String,
+      default: null,
+    },
+    resetPasswordExpires: {
+      type: Date,
+      default: null,
+    },
+  },
+  {
+    timestamps: { createdAt: 'criado_em', updatedAt: 'atualizado_em' },
+  }
+);
 
+const Usuario = mongoose.model('Usuario', usuarioSchema);
+
+const UsuarioModel = {
   async buscarPorEmail(email) {
-    const [linhas] = await pool.query(
-      'SELECT * FROM usuarios WHERE email = ? LIMIT 1',
-      [email.toLowerCase().trim()]
-    );
-    return linhas[0] || null;
+    if (!email) return null;
+    return await Usuario.findOne({ email: email.toLowerCase().trim() });
   },
 
   async buscarPorId(id) {
-    const [linhas] = await pool.query(
-      'SELECT id, nome, email, avatar, criado_em, atualizado_em FROM usuarios WHERE id = ? LIMIT 1',
-      [id]
-    );
-    return linhas[0] || null;
+    if (!mongoose.Types.ObjectId.isValid(id)) return null;
+    return await Usuario.findById(id);
   },
 
   async criar({ nome, email, senha }) {
     const hash = await bcrypt.hash(senha, parseInt(process.env.BCRYPT_ROUNDS || '12'));
-    const [resultado] = await pool.query(
-      'INSERT INTO usuarios (nome, email, senha) VALUES (?, ?, ?)',
-      [nome.trim(), email.toLowerCase().trim(), hash]
-    );
-    return this.buscarPorId(resultado.insertId);
+    const novoUsuario = new Usuario({
+      nome: nome.trim(),
+      email: email.toLowerCase().trim(),
+      senha: hash,
+    });
+    return await novoUsuario.save();
   },
 
   async atualizar(id, { nome, avatar }) {
-    const campos = [];
-    const valores = [];
-    if (nome !== undefined) { campos.push('nome = ?'); valores.push(nome.trim()); }
-    if (avatar !== undefined) { campos.push('avatar = ?'); valores.push(avatar); }
-    if (!campos.length) return this.buscarPorId(id);
-    valores.push(id);
-    await pool.query(`UPDATE usuarios SET ${campos.join(', ')} WHERE id = ?`, valores);
-    return this.buscarPorId(id);
+    if (!mongoose.Types.ObjectId.isValid(id)) return null;
+
+    const camposAtualizacao = {};
+    if (nome !== undefined) camposAtualizacao.nome = nome.trim();
+    if (avatar !== undefined) camposAtualizacao.avatar = avatar;
+
+    if (Object.keys(camposAtualizacao).length === 0) {
+      return this.buscarPorId(id);
+    }
+
+    return await Usuario.findByIdAndUpdate(id, camposAtualizacao, { new: true });
   },
 
   async alterarSenha(id, novaSenha) {
+    if (!mongoose.Types.ObjectId.isValid(id)) return;
     const hash = await bcrypt.hash(novaSenha, parseInt(process.env.BCRYPT_ROUNDS || '12'));
-    await pool.query('UPDATE usuarios SET senha = ? WHERE id = ?', [hash, id]);
+    await Usuario.findByIdAndUpdate(id, { senha: hash });
   },
 
   async verificarSenha(textoPlano, hash) {
@@ -49,8 +85,9 @@ const UsuarioModel = {
   },
 
   formatar(usuario) {
+    if (!usuario) return null;
     return {
-      id: usuario.id,
+      id: usuario._id ? usuario._id.toString() : usuario.id,
       nome: usuario.nome,
       email: usuario.email,
       avatar: usuario.avatar || null,

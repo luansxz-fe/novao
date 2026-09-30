@@ -84,7 +84,7 @@ export default function RegisterPage({ navigate }: Props) {
                   autoComplete="new-password"
                 />
                 <button type="button" className="input-eye" onClick={() => setMostrarSenha(!mostrarSenha)}>
-                  {mostrarSenha ? '🙈' : '👁️'}
+                  {mostrarSenha ? '🔒' : '🔓'}
                 </button>
               </div>
               {senha && (

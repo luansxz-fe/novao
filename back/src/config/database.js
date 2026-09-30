@@ -1,27 +1,21 @@
-const mysql = require('mysql2/promise');
+const mongoose = require('mongoose');
 require('dotenv').config();
 
-const pool = mysql.createPool({
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '3306'),
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || 'root',
-  database: process.env.DB_NAME || 'medsync',
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-  charset: 'utf8mb4',
-  timezone: 'Z',
-});
+async function conectarBanco() {
+  const MONGODB_URI = process.env.MONGODB_URI;
 
-pool.getConnection()
-  .then(conexao => {
-    console.log('Conexão com MySQL estabelecida');
-    conexao.release();
-  })
-  .catch(erro => {
-    console.error('Erro ao conectar no MySQL:', erro.message);
+  if (!MONGODB_URI) {
+    console.error('Erro: A variável MONGODB_URI não foi definida no arquivo .env');
     process.exit(1);
-  });
+  }
 
-module.exports = pool;
+  try {
+    await mongoose.connect(MONGODB_URI);
+    console.log('Conexão com o MongoDB estabelecida com sucesso!');
+  } catch (erro) {
+    console.error('Erro ao conectar no MongoDB:', erro.message);
+    process.exit(1);
+  }
+}
+
+module.exports = conectarBanco;

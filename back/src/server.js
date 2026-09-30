@@ -3,26 +3,23 @@ const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 
-const rotasAuth = require('./routes/authRoutes');
-const rotasUsuarios = require('./routes/usuarioRoutes');
-const rotasMedicamentos = require('./routes/medicationRoutes');
-const rotasRegistros = require('./routes/logRoutes');
-const { tratarErro, rotaNaoEncontrada } = require('./middleware/errorHandler');
+const conectarBanco = require('./config/database');
 
-require('./config/database');
+const rotasAuth = require('./routes/authRoutes.js');
+const rotasUsuarios = require('./routes/usuarioRoutes.js');
+const rotasMedicamentos = require('./routes/MedicationRoutes.js');
+const rotasRegistros = require('./routes/logRoutes.js');
+const { tratarErro, rotaNaoEncontrada } = require('./middleware/errorHandler.js');
 
 const app = express();
 const PORTA = process.env.PORT || 3001;
 
+conectarBanco();
+
 app.use(cors({
-  origin: [
-    process.env.FRONTEND_URL || 'http://localhost:5173',
-    'http://localhost:5174',
-    'http://127.0.0.1:5173',
-  ],
+  origin: '*', 
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
 }));
 
 app.use(express.json({ limit: '2mb' }));

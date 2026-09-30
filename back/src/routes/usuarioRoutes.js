@@ -1,6 +1,6 @@
 const router = require('express').Router();
-const ctrl = require('../controllers/UsuarioController');
-const autenticar = require('../middleware/auth');
+const ctrl = require('../controllers/UsuarioController.js');
+const autenticar = require('../middleware/auth.js');
 
 router.use(autenticar);
 

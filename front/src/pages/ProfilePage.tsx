@@ -29,8 +29,8 @@ export default function ProfilePage({ navigate }: Props) {
     }
   };
 
-  const totalTomadas = logs.filter(l => l.status === 'taken').length;
-  const totalPerdidas = logs.filter(l => l.status === 'missed').length;
+  const totalTomadas = logs.filter(l => l.status === 'taken' || l.situacao === 'TOMADO').length;
+  const totalPerdidas = logs.filter(l => l.status === 'missed' || l.situacao === 'PERDIDO').length;
   const medsAtivos = medications.filter(m => m.active).length;
   const adesao = logs.length ? Math.round((totalTomadas / logs.length) * 100) : 100;
   const dataIngresso = usuario?.createdAt
@@ -50,14 +50,15 @@ export default function ProfilePage({ navigate }: Props) {
   };
 
   return (
-    <div className="profile-page">
-      <div className="profile-hero">
+    <div className="profile-page" style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
+      {/* Banner de Perfil Expandido */}
+      <div className="profile-hero" style={{ width: '100%' }}>
         <div className="profile-hero__bg" />
-        <div className="profile-hero__content">
+        <div className="profile-hero__content" style={{ width: '100%', maxWidth: '100%' }}>
           <div className="profile-avatar-lg">
             {usuario?.name?.charAt(0).toUpperCase()}
           </div>
-          <div className="profile-hero__info">
+          <div className="profile-hero__info" style={{ flex: 1 }}>
             {editando ? (
               <div className="profile-edit-row">
                 <input className="profile-name-input" value={nome} onChange={e => setNome(e.target.value)} autoFocus />
@@ -76,7 +77,17 @@ export default function ProfilePage({ navigate }: Props) {
         </div>
       </div>
 
-      <div className="profile-stats-grid">
+      {/* Grid de Estatísticas em Largura Total */}
+      <div 
+        className="profile-stats-grid" 
+        style={{ 
+          width: '100%', 
+          display: 'grid', 
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', 
+          gap: '16px',
+          marginBottom: '24px' 
+        }}
+      >
         <div className="profile-stat-card profile-stat-card--blue">
           <strong>{medsAtivos}</strong><span>Medicamentos ativos</span>
         </div>
@@ -91,14 +102,15 @@ export default function ProfilePage({ navigate }: Props) {
         </div>
       </div>
 
-      <div className="card">
+      {/* Barra de Progresso de Adesão */}
+      <div className="card" style={{ width: '100%', boxSizing: 'border-box' }}>
         <div className="card__header"><h2>Adesão ao tratamento</h2></div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
             <span>{totalTomadas} doses tomadas de {logs.length} registros</span>
             <strong style={{ color: adesao >= 80 ? 'var(--success)' : adesao >= 50 ? 'var(--warning)' : 'var(--danger)' }}>{adesao}%</strong>
           </div>
-          <div className="stock-bar-preview__track" style={{ height: 10 }}>
+          <div className="stock-bar-preview__track" style={{ height: 10, width: '100%' }}>
             <div className="stock-bar-preview__fill" style={{
               width: `${adesao}%`,
               background: adesao >= 80 ? 'var(--success)' : adesao >= 50 ? 'var(--warning)' : 'var(--danger)'
@@ -110,10 +122,11 @@ export default function ProfilePage({ navigate }: Props) {
         </div>
       </div>
 
-      <div className="profile-sections">
+      {/* Seções de Configuração */}
+      <div className="profile-sections" style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
         {/* Modo de Acessibilidade */}
-        <div className={`card card--acessibilidade ${modoIdoso ? 'card--acessibilidade-ativo' : ''}`}>
+        <div className={`card card--acessibilidade ${modoIdoso ? 'card--acessibilidade-ativo' : ''}`} style={{ width: '100%' }}>
           <div className="acessibilidade-header">
             <div className="acessibilidade-icon">♿</div>
             <div className="acessibilidade-info">
@@ -157,7 +170,8 @@ export default function ProfilePage({ navigate }: Props) {
           </div>
         </div>
 
-        <div className="card">
+        {/* Conta */}
+        <div className="card" style={{ width: '100%' }}>
           <h2 className="card-section-title">Conta</h2>
           <div className="profile-items">
             <div className="profile-item">
@@ -178,7 +192,8 @@ export default function ProfilePage({ navigate }: Props) {
           </div>
         </div>
 
-        <div className="card">
+        {/* Preferências */}
+        <div className="card" style={{ width: '100%' }}>
           <h2 className="card-section-title">Preferências</h2>
           <div className="profile-items">
             <div className="profile-item">
@@ -194,7 +209,8 @@ export default function ProfilePage({ navigate }: Props) {
           </div>
         </div>
 
-        <div className="card">
+        {/* Dados */}
+        <div className="card" style={{ width: '100%' }}>
           <h2 className="card-section-title">Dados</h2>
           <div className="profile-items">
             <div className="profile-item">
@@ -214,7 +230,8 @@ export default function ProfilePage({ navigate }: Props) {
           </div>
         </div>
 
-        <div className="card card--danger">
+        {/* Sessão */}
+        <div className="card card--danger" style={{ width: '100%' }}>
           <h2 className="card-section-title">Sessão</h2>
           <div className="profile-items">
             <div className="profile-item">
@@ -228,7 +245,7 @@ export default function ProfilePage({ navigate }: Props) {
         </div>
       </div>
 
-      {/* Modal: confirmar modo acessibilidade */}
+      {/* Modal Acessibilidade */}
       {confirmarModo && (
         <div className="modal-overlay" onClick={() => setConfirmarModo(false)}>
           <div className="modal modal--sm" onClick={e => e.stopPropagation()}>
@@ -265,7 +282,7 @@ export default function ProfilePage({ navigate }: Props) {
         </div>
       )}
 
-      {/* Modal: confirmar saída */}
+      {/* Modal Saída */}
       {confirmarSaida && (
         <div className="modal-overlay" onClick={() => setConfirmarSaida(false)}>
           <div className="modal modal--sm" onClick={e => e.stopPropagation()}>

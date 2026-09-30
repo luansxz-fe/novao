@@ -1,196 +1,400 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { Medication, MedicationLog } from '../types';
-import { useAuth } from './AuthContext';
+import React, { createContext, useState, useEffect } from 'react';
+import { Medication, DoseLog, TodayMedicationItem } from '../types';
 import { api } from '../services/api';
 
-interface MedContextType {
+export interface MedContextData {
   medications: Medication[];
-  logs: MedicationLog[];
-  loading: boolean;
-  addMedication: (med: Omit<Medication, 'id' | 'userId' | 'createdAt'>) => Promise<void>;
-  updateMedication: (id: string, dados: Partial<Medication>) => Promise<void>;
+  logs: DoseLog[];
+  adherence: { dias7: number; dias30: number };
+  addMedication: (data: Omit<Medication, 'id'> & { id?: string; _id?: string }) => Promise<void>;
+  updateMedication: (id: string, data: Partial<Medication>) => Promise<void>;
   deleteMedication: (id: string) => Promise<void>;
-  logDose: (medicamentoId: string, horario: string, situacao: MedicationLog['status'], observacao?: string) => Promise<void>;
-  getTodayLogs: () => MedicationLog[];
-  getAdherenceRate: (dias?: number) => number;
-  getTodayMedications: () => { medication: Medication; log?: MedicationLog; scheduledTime: string }[];
+  logDose: (medicationId: string, time: string, status: string, notes?: string) => Promise<void>;
+  getTodayMedications: () => TodayMedicationItem[];
   getUpcomingDoses: () => { medication: Medication; time: string }[];
-  refresh: () => Promise<void>;
+  getAdherenceRate: (days: number) => number;
+  fetchMedications: () => Promise<void>;
+  fetchAdherence: () => Promise<void>;
 }
 
-const MedContext = createContext<MedContextType>({} as MedContextType);
+export const MedContext = createContext<MedContextData>({} as MedContextData);
 
-const MAPA_SITUACAO: Record<string, string> = {
-  tomada: 'taken', perdida: 'missed', pulada: 'skipped', pendente: 'pending',
+const STORAGE_KEY_MEDS = '@medapp:medications_cache';
+const STORAGE_KEY_LOGS = '@medapp:logs_cache';
+
+const getTodayString = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
-const MAPA_STATUS: Record<string, string> = {
-  taken: 'tomada', missed: 'perdida', skipped: 'pulada', pending: 'pendente',
+
+const normalizeDate = (d?: any): string => {
+  if (!d) return getTodayString();
+  const str = String(d).trim();
+  if (str.includes('T')) return str.split('T')[0];
+  return str.slice(0, 10);
 };
 
-function converterMedicamento(d: any): Medication {
-  return {
-    id: String(d.id),
-    userId: String(d.usuarioId),
-    name: d.nome,
-    dosage: d.dosagem,
-    unit: d.unidade,
-    frequency: d.frequencia,
-    times: d.horarios || [],
-    startDate: d.dataInicio,
-    endDate: d.dataTermino || undefined,
-    instructions: d.instrucoes || undefined,
-    color: d.cor,
-    icon: d.icone,
-    category: d.categoria,
-    stock: d.estoqueAtual,
-    stockMax: d.estoqueMaximo,
-    reminderEnabled: d.lembreteAtivo,
-    active: d.ativo,
-    imageUrl: d.urlImagem || undefined,
-    prescribedBy: d.medicoPrescritor || undefined,
-    sideEffects: d.efeitosColaterais || undefined,
-    createdAt: d.criadoEm,
-  };
-}
+const normalizeTime = (t?: any): string => {
+  if (!t) return '';
+  return String(t).trim().slice(0, 5);
+};
 
-function converterRegistro(d: any): MedicationLog {
-  return {
-    id: String(d.id),
-    medicationId: String(d.medicamentoId),
-    userId: String(d.usuarioId),
-    scheduledTime: d.horarioAgendado,
-    takenAt: d.tomadoEm || undefined,
-    status: (MAPA_SITUACAO[d.situacao] || d.situacao) as MedicationLog['status'],
-    date: d.dataDose,
-    notes: d.observacao || undefined,
-  };
-}
+const isTimePassed = (timeStr: string) => {
+  const normalized = normalizeTime(timeStr);
+  if (!normalized) return false;
+  const [h, m] = normalized.split(':').map(Number);
+  if (isNaN(h) || isNaN(m)) return false;
+  
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const scheduledMinutes = h * 60 + m;
+  return currentMinutes > scheduledMinutes;
+};
 
-function converterParaEnvio(med: Omit<Medication, 'id' | 'userId' | 'createdAt'>): any {
-  return {
-    nome: med.name,
-    dosagem: med.dosage,
-    unidade: med.unit,
-    frequencia: med.frequency,
-    horarios: med.times,
-    dataInicio: med.startDate,
-    dataTermino: med.endDate || null,
-    instrucoes: med.instructions || null,
-    cor: med.color,
-    icone: med.icon,
-    categoria: med.category,
-    estoqueAtual: med.stock,
-    estoqueMaximo: med.stockMax,
-    lembreteAtivo: med.reminderEnabled,
-    ativo: med.active,
-    urlImagem: med.imageUrl || null,
-    medicoPrescritor: med.prescribedBy || null,
-    efeitosColaterais: med.sideEffects || null,
-  };
-}
-
-export function MedProvider({ children }: { children: React.ReactNode }) {
-  const { usuario } = useAuth();
-  const [medications, setMedications] = useState<Medication[]>([]);
-  const [logs, setLogs] = useState<MedicationLog[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  const buscarTudo = useCallback(async () => {
-    if (!usuario) { setMedications([]); setLogs([]); return; }
-    setLoading(true);
+export const MedProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // Inicializa o estado diretamente do localStorage para não perder nada ao atualizar
+  const [medications, setMedications] = useState<Medication[]>(() => {
     try {
-      const [resMeds, resLogs] = await Promise.all([
-        api.medicamentos.listar(),
-        api.registros.listar(),
-      ]);
-      setMedications((resMeds.dados || []).map(converterMedicamento));
-      setLogs((resLogs.dados || []).map(converterRegistro));
-    } catch (erro) {
-      console.error('Erro ao carregar dados:', erro);
-    } finally {
-      setLoading(false);
+      const saved = localStorage.getItem(STORAGE_KEY_MEDS);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
     }
-  }, [usuario]);
+  });
 
-  useEffect(() => { buscarTudo(); }, [buscarTudo]);
+  const [logs, setLogs] = useState<DoseLog[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_LOGS);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
 
-  const addMedication = async (med: Omit<Medication, 'id' | 'userId' | 'createdAt'>) => {
-    const res = await api.medicamentos.criar(converterParaEnvio(med));
-    setMedications(prev => [converterMedicamento(res.dados), ...prev]);
+  const [adherence, setAdherence] = useState<{ dias7: number; dias30: number }>({ dias7: 100, dias30: 100 });
+
+  // Salva no localStorage sempre que os medicamentos mudarem
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_MEDS, JSON.stringify(medications));
+  }, [medications]);
+
+  // Salva no localStorage sempre que os logs mudarem
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(logs));
+  }, [logs]);
+
+  const formatMed = (item: any): Medication => {
+    const realId = String(item.id || item._id || Date.now()).trim();
+    return {
+      id: realId,
+      _id: realId,
+      name: item.nome || item.name || '',
+      dosage: item.dosagem || item.dosage || '',
+      unit: item.unidade || item.unit || 'mg',
+      frequency: item.frequencia || item.frequency || 'Diário',
+      times: item.horarios || item.times || [],
+      stock: Number(item.estoque ?? item.stock ?? 0),
+      stockMax: item.estoqueMaximo || item.stockMax ? Number(item.estoqueMaximo || item.stockMax) : undefined,
+      active: item.ativo ?? item.active ?? true,
+      color: item.cor || item.color || '#3b82f6',
+      category: item.categoria || item.category || 'Outros',
+      icon: item.icon,
+      imageUrl: item.imageUrl || item.imagemUrl,
+      prescribedBy: item.medico || item.prescribedBy,
+      startDate: item.dataInicio || item.startDate,
+      endDate: item.dataFim || item.endDate,
+      reminderEnabled: item.lembreteAtivo ?? item.reminderEnabled,
+      instructions: item.instrucoes || item.instructions,
+      sideEffects: item.efeitosColaterais || item.sideEffects,
+    };
   };
 
-  const updateMedication = async (id: string, dados: Partial<Medication>) => {
-    const res = await api.medicamentos.atualizar(Number(id), converterParaEnvio(dados as any));
-    setMedications(prev => prev.map(m => m.id === id ? converterMedicamento(res.dados) : m));
+  const parseLog = (l: any): DoseLog => {
+    const rawStatus = String(l.situacao || l.status || '').toUpperCase().trim();
+    const isTaken = ['TOMADO', 'TAKEN', 'CONCLUIDO', 'OK', 'TRUE'].includes(rawStatus);
+    const isMissed = ['PERDIDO', 'MISSED', 'ATRASADO'].includes(rawStatus);
+
+    const frontendStatus: 'taken' | 'skipped' | 'missed' = isTaken ? 'taken' : isMissed ? 'missed' : 'skipped';
+    const backendStatus = isTaken ? 'TOMADO' : isMissed ? 'PERDIDO' : 'PULADO';
+
+    const medId = String(
+      l.medicamentoId || 
+      l.medicationId || 
+      (typeof l.medicamento === 'object' ? (l.medicamento?.id || l.medicamento?._id) : l.medicamento) || 
+      ''
+    ).trim();
+
+    return {
+      id: String(l.id || l._id || Date.now()).trim(),
+      _id: String(l._id || l.id || Date.now()).trim(),
+      medicationId: medId,
+      scheduledTime: normalizeTime(l.horarioAgendado || l.scheduledTime || l.horario),
+      status: frontendStatus,
+      situacao: backendStatus,
+      date: normalizeDate(l.data || l.date || l.criadoEm || l.createdAt),
+      notes: l.observacao || l.notes
+    };
+  };
+
+  const parseToApiPayload = (med: any) => ({
+    nome: med.name || med.nome,
+    dosagem: med.dosage || med.dosagem,
+    unidade: med.unit || med.unidade,
+    frequencia: med.frequency || med.frequencia,
+    horarios: med.times || med.horarios,
+    estoque: med.stock ?? med.estoque,
+    cor: med.color || med.cor,
+    categoria: med.category || med.categoria,
+    ativo: med.active ?? med.ativo ?? true,
+    medico: med.prescribedBy || med.medico,
+    instrucoes: med.instructions || med.instrucoes
+  });
+
+  const fetchAdherence = async () => {
+    try {
+      const res = await api.registros.adesao();
+      if (res?.dados) {
+        setAdherence({
+          dias7: Number(res.dados.dias7 ?? 0),
+          dias30: Number(res.dados.dias30 ?? 0)
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao buscar taxa de adesão:', error);
+    }
+  };
+
+  const fetchMedications = async () => {
+    try {
+      const [medsRes, logsRes] = await Promise.all([
+        api.medicamentos.listar().catch(() => null),
+        api.registros.listar().catch(() => null)
+      ]);
+
+      // Atualiza o estado via API apenas se ela retornar um array não vazio
+      if (medsRes?.dados && Array.isArray(medsRes.dados) && medsRes.dados.length > 0) {
+        setMedications(medsRes.dados.map(formatMed));
+      }
+
+      if (logsRes?.dados && Array.isArray(logsRes.dados) && logsRes.dados.length > 0) {
+        setLogs(logsRes.dados.map(parseLog));
+      }
+
+      await fetchAdherence();
+    } catch (error) {
+      console.error('Erro ao carregar dados da API:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchMedications();
+  }, []);
+
+  const addMedication = async (medData: Omit<Medication, 'id'> & { id?: string; _id?: string }) => {
+    const tempId = String(Date.now());
+    const newMed = formatMed({ ...medData, id: tempId });
+    
+    setMedications(prev => [...prev, newMed]);
+
+    try {
+      const res = await api.medicamentos.criar(parseToApiPayload(medData));
+      if (res?.dados) {
+        setMedications(prev => prev.map(m => (m.id === tempId ? formatMed(res.dados) : m)));
+      }
+    } catch (error) {
+      console.error('Erro ao criar medicamento na API (mantido localmente):', error);
+    }
+  };
+
+  const updateMedication = async (id: string, data: Partial<Medication>) => {
+    if (!id) return;
+    setMedications(prev => prev.map(m => (String(m.id) === String(id) || String(m._id) === String(id)) ? { ...m, ...data } : m));
+
+    try {
+      const targetId = !isNaN(Number(id)) ? Number(id) : id;
+      await api.medicamentos.atualizar(targetId, parseToApiPayload(data));
+    } catch (error) {
+      console.error('Erro ao atualizar medicamento na API:', error);
+    }
   };
 
   const deleteMedication = async (id: string) => {
-    await api.medicamentos.excluir(Number(id));
-    setMedications(prev => prev.filter(m => m.id !== id));
-    setLogs(prev => prev.filter(l => l.medicationId !== id));
+    if (!id) return;
+    setMedications(prev => prev.filter(m => String(m.id) !== String(id) && String(m._id) !== String(id)));
+
+    try {
+      const targetId = !isNaN(Number(id)) ? Number(id) : id;
+      await api.medicamentos.excluir(targetId);
+    } catch (error) {
+      console.error('Erro ao eliminar medicamento na API:', error);
+    }
   };
 
-  const logDose = async (medicamentoId: string, horario: string, status: MedicationLog['status'], observacao?: string) => {
-    const situacao = MAPA_STATUS[status] || status;
-    const res = await api.registros.salvar(Number(medicamentoId), horario, situacao, observacao);
-    const novoLog = converterRegistro(res.dados);
-    setLogs(prev => {
-      const idx = prev.findIndex(l => l.medicationId === medicamentoId && l.scheduledTime === horario && l.date === novoLog.date);
-      return idx >= 0 ? prev.map((l, i) => i === idx ? novoLog : l) : [...prev, novoLog];
-    });
-  };
+  const logDose = async (medicationId: string, time: string, status: string, notes?: string) => {
+    const todayStr = getTodayString();
+    const cleanTime = normalizeTime(time);
+    const cleanMedId = String(medicationId).trim();
+    
+    const rawStatus = String(status).trim().toLowerCase();
+    const isTaken = ['taken', 'tomado', 'concluido', 'ok', 'true'].includes(rawStatus);
+    const isMissed = ['missed', 'perdido', 'atrasado'].includes(rawStatus);
 
-  const getTodayLogs = () => {
-    const hoje = new Date().toISOString().split('T')[0];
-    return logs.filter(l => l.date === hoje);
-  };
+    const frontendStatus: 'taken' | 'skipped' | 'missed' = isTaken ? 'taken' : isMissed ? 'missed' : 'skipped';
+    const backendStatus = isTaken ? 'TOMADO' : isMissed ? 'PERDIDO' : 'PULADO';
 
-  const getAdherenceRate = (dias = 7) => {
-    const corte = new Date(); corte.setDate(corte.getDate() - dias);
-    const recentes = logs.filter(l => new Date(l.date) >= corte);
-    if (!recentes.length) return 100;
-    return Math.round((recentes.filter(l => l.status === 'taken').length / recentes.length) * 100);
-  };
+    const existingLog = logs.find(l => 
+      String(l.medicationId).trim() === cleanMedId &&
+      normalizeTime(l.scheduledTime) === cleanTime &&
+      normalizeDate(l.date) === todayStr
+    );
 
-  const getTodayMedications = useCallback(() => {
-    const hoje = new Date().toISOString().split('T')[0];
-    const logsHoje = logs.filter(l => l.date === hoje);
-    const resultado: { medication: Medication; log?: MedicationLog; scheduledTime: string }[] = [];
-    medications.filter(m => m.active).forEach(med => {
-      med.times.forEach(horario => {
-        const log = logsHoje.find(l => l.medicationId === med.id && l.scheduledTime === horario);
-        resultado.push({ medication: med, log, scheduledTime: horario });
-      });
-    });
-    return resultado.sort((a, b) => a.scheduledTime.localeCompare(b.scheduledTime));
-  }, [medications, logs]);
+    const wasTakenBefore = existingLog?.status === 'taken' || existingLog?.situacao === 'TOMADO';
 
-  const getUpcomingDoses = useCallback(() => {
-    const agora = new Date();
-    const horaAtual = `${String(agora.getHours()).padStart(2, '0')}:${String(agora.getMinutes()).padStart(2, '0')}`;
-    const hoje = agora.toISOString().split('T')[0];
-    const logsHoje = logs.filter(l => l.date === hoje);
-    const resultado: { medication: Medication; time: string }[] = [];
-    medications.filter(m => m.active).forEach(med => {
-      med.times.forEach(horario => {
-        if (horario > horaAtual && !logsHoje.find(l => l.medicationId === med.id && l.scheduledTime === horario)) {
-          resultado.push({ medication: med, time: horario });
+    const newLog: DoseLog = {
+      id: String(Date.now()),
+      _id: String(Date.now()),
+      medicationId: cleanMedId,
+      scheduledTime: cleanTime,
+      status: frontendStatus,
+      situacao: backendStatus,
+      date: todayStr,
+      notes
+    };
+
+    setLogs(prev => [
+      newLog,
+      ...prev.filter(l => !(
+        String(l.medicationId).trim() === cleanMedId &&
+        normalizeTime(l.scheduledTime) === cleanTime &&
+        normalizeDate(l.date) === todayStr
+      ))
+    ]);
+
+    if (isTaken && !wasTakenBefore) {
+      setMedications(prev => prev.map(m => {
+        if (String(m.id).trim() === cleanMedId || String(m._id).trim() === cleanMedId) {
+          const newStock = Math.max(0, (m.stock ?? 1) - 1);
+          const targetId = !isNaN(Number(cleanMedId)) ? Number(cleanMedId) : cleanMedId;
+          api.medicamentos.atualizar(targetId, parseToApiPayload({ ...m, stock: newStock })).catch(() => {});
+          return { ...m, stock: newStock };
         }
+        return m;
+      }));
+    }
+
+    try {
+      const targetMedId = !isNaN(Number(cleanMedId)) ? Number(cleanMedId) : cleanMedId;
+      const res = await api.registros.salvar(targetMedId, cleanTime, backendStatus, notes);
+
+      if (res?.dados) {
+        const parsedServerLog = parseLog(res.dados);
+        setLogs(prev => prev.map(l => l.id === newLog.id ? parsedServerLog : l));
+      }
+
+      await fetchAdherence();
+    } catch (error) {
+      console.error('Erro ao salvar registro na API:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (medications.length === 0) return;
+
+    const checkMissedDoses = () => {
+      const todayStr = getTodayString();
+
+      medications.filter(m => m.active).forEach(med => {
+        (med.times || []).forEach(time => {
+          const cleanTime = normalizeTime(time);
+          const medId = String(med.id || med._id).trim();
+
+          const hasLog = logs.some(l => 
+            String(l.medicationId).trim() === medId &&
+            normalizeTime(l.scheduledTime) === cleanTime &&
+            normalizeDate(l.date) === todayStr
+          );
+
+          if (!hasLog && isTimePassed(cleanTime)) {
+            logDose(medId, cleanTime, 'missed');
+          }
+        });
+      });
+    };
+
+    checkMissedDoses();
+    const interval = setInterval(checkMissedDoses, 30000);
+    return () => clearInterval(interval);
+  }, [medications, logs]);
+
+  const getTodayMedications = (): TodayMedicationItem[] => {
+    const todayStr = getTodayString();
+    const items: TodayMedicationItem[] = [];
+
+    medications.filter(m => m.active).forEach(med => {
+      (med.times || []).forEach(time => {
+        const cleanTime = normalizeTime(time);
+        const medId = String(med.id || med._id).trim();
+
+        const log = logs.find(l => {
+          const matchMed = String(l.medicationId).trim() === medId;
+          const matchTime = normalizeTime(l.scheduledTime) === cleanTime;
+          const matchDate = normalizeDate(l.date) === todayStr;
+          return matchMed && matchTime && matchDate;
+        });
+
+        items.push({ medication: med, scheduledTime: cleanTime, log });
       });
     });
-    return resultado.sort((a, b) => a.time.localeCompare(b.time)).slice(0, 5);
-  }, [medications, logs]);
+
+    return items;
+  };
+
+  const getUpcomingDoses = (): { medication: Medication; time: string }[] => {
+    const todayMeds = getTodayMedications();
+    return todayMeds
+      .filter(item => !item.log && !isTimePassed(item.scheduledTime))
+      .map(item => ({ medication: item.medication, time: item.scheduledTime }));
+  };
+
+  const getAdherenceRate = (days: number): number => {
+    if (logs.length === 0) return 100;
+
+    const today = new Date();
+    const limitDate = new Date();
+    limitDate.setDate(today.getDate() - days);
+
+    const recentLogs = logs.filter(l => {
+      const logDate = new Date(l.date);
+      return logDate >= limitDate;
+    });
+
+    const targetLogs = recentLogs.length > 0 ? recentLogs : logs;
+    const tomadas = targetLogs.filter(l => l.status === 'taken' || l.situacao === 'TOMADO').length;
+
+    return Math.round((tomadas / targetLogs.length) * 100);
+  };
 
   return (
     <MedContext.Provider value={{
-      medications, logs, loading,
-      addMedication, updateMedication, deleteMedication, logDose,
-      getTodayLogs, getAdherenceRate, getTodayMedications, getUpcomingDoses,
-      refresh: buscarTudo,
+      medications,
+      logs,
+      adherence,
+      addMedication,
+      updateMedication,
+      deleteMedication,
+      logDose,
+      getTodayMedications,
+      getUpcomingDoses,
+      getAdherenceRate,
+      fetchMedications,
+      fetchAdherence
     }}>
       {children}
     </MedContext.Provider>
   );
-}
+};
 
-export const useMed = () => useContext(MedContext);
+export { useMed } from './useMed';

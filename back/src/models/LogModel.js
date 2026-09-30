@@ -1,88 +1,165 @@
-const pool = require('../config/database');
+const mongoose = require('mongoose');
+
+const registroDoseSchema = new mongoose.Schema(
+  {
+    medicamento_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Medicamento',
+      required: true,
+    },
+    usuario_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Usuario',
+      required: true,
+    },
+    horario_agendado: {
+      type: String,
+      required: true,
+    },
+    tomado_em: {
+      type: Date,
+      default: null,
+    },
+    situacao: {
+      type: String,
+      required: true,
+    },
+    data_dose: {
+      type: String,
+      required: true,
+    },
+    observacao: {
+      type: String,
+      default: null,
+    },
+  },
+  {
+    timestamps: { createdAt: 'criado_em', updatedAt: 'atualizado_em' },
+  }
+);
+
+const RegistroDose = mongoose.model('RegistroDose', registroDoseSchema);
 
 const RegistroDoseModel = {
+  formatar(doc) {
+    if (!doc) return null;
 
-  formatar(linha) {
-    if (!linha) return null;
-    const formatarData = (valor) => valor instanceof Date ? valor.toISOString().split('T')[0] : valor;
+    const formatarData = (valor) => {
+      if (!valor) return null;
+      if (valor instanceof Date) return valor.toISOString().split('T')[0];
+      return valor;
+    };
+
     return {
-      id: linha.id,
-      medicamentoId: linha.medicamento_id,
-      usuarioId: linha.usuario_id,
-      horarioAgendado: linha.horario_agendado,
-      tomadoEm: linha.tomado_em ? new Date(linha.tomado_em).toISOString() : null,
-      situacao: linha.situacao,
-      dataDose: formatarData(linha.data_dose),
-      observacao: linha.observacao || null,
-      criadoEm: linha.criado_em instanceof Date ? linha.criado_em.toISOString() : linha.criado_em,
+      id: doc._id ? doc._id.toString() : doc.id,
+      medicamentoId: doc.medicamento_id ? doc.medicamento_id.toString() : doc.medicamentoId,
+      usuarioId: doc.usuario_id ? doc.usuario_id.toString() : doc.usuarioId,
+      horarioAgendado: doc.horario_agendado,
+      tomadoEm: doc.tomado_em ? new Date(doc.tomado_em).toISOString() : null,
+      situacao: doc.situacao,
+      dataDose: formatarData(doc.data_dose),
+      observacao: doc.observacao || null,
+      criadoEm: doc.criado_em instanceof Date ? doc.criado_em.toISOString() : doc.criado_em,
     };
   },
 
   async listarPorUsuario(usuarioId, { dias } = {}) {
-    let sql = 'SELECT * FROM registros_doses WHERE usuario_id = ?';
-    const parametros = [usuarioId];
+    if (!mongoose.Types.ObjectId.isValid(usuarioId)) return [];
+
+    const filtro = { usuario_id: usuarioId };
+
     if (dias) {
-      sql += ' AND data_dose >= DATE_SUB(CURDATE(), INTERVAL ? DAY)';
-      parametros.push(dias);
+      const dataLimite = new Date();
+      dataLimite.setDate(dataLimite.getDate() - parseInt(dias));
+      const limiteStr = dataLimite.toISOString().split('T')[0];
+      filtro.data_dose = { $gte: limiteStr };
     }
-    sql += ' ORDER BY data_dose DESC, horario_agendado DESC';
-    const [linhas] = await pool.query(sql, parametros);
-    return linhas.map(this.formatar.bind(this));
+
+    const docs = await RegistroDose.find(filtro).sort({
+      data_dose: -1,
+      horario_agendado: -1,
+    });
+
+    return docs.map((doc) => this.formatar(doc));
   },
 
   async listarHoje(usuarioId) {
-    const [linhas] = await pool.query(
-      'SELECT * FROM registros_doses WHERE usuario_id = ? AND data_dose = CURDATE()',
-      [usuarioId]
-    );
-    return linhas.map(this.formatar.bind(this));
+    if (!mongoose.Types.ObjectId.isValid(usuarioId)) return [];
+
+    const hoje = new Date().toISOString().split('T')[0];
+    const docs = await RegistroDose.find({
+      usuario_id: usuarioId,
+      data_dose: hoje,
+    });
+
+    return docs.map((doc) => this.formatar(doc));
   },
 
   async salvar(usuarioId, medicamentoId, horarioAgendado, situacao, observacao = null) {
+    if (!mongoose.Types.ObjectId.isValid(usuarioId) || !mongoose.Types.ObjectId.isValid(medicamentoId)) {
+      return null;
+    }
+
     const hoje = new Date().toISOString().split('T')[0];
     const tomadoEm = situacao === 'tomada' ? new Date() : null;
 
-    const [existente] = await pool.query(
-      'SELECT id FROM registros_doses WHERE medicamento_id = ? AND data_dose = ? AND horario_agendado = ?',
-      [medicamentoId, hoje, horarioAgendado]
-    );
+    const existente = await RegistroDose.findOne({
+      medicamento_id: medicamentoId,
+      data_dose: hoje,
+      horario_agendado: horarioAgendado,
+    });
 
-    if (existente.length) {
-      await pool.query(
-        'UPDATE registros_doses SET situacao = ?, tomado_em = ?, observacao = ?, usuario_id = ? WHERE id = ?',
-        [situacao, tomadoEm, observacao, usuarioId, existente[0].id]
-      );
-      const [atualizado] = await pool.query('SELECT * FROM registros_doses WHERE id = ?', [existente[0].id]);
-      return this.formatar(atualizado[0]);
+    if (existente) {
+      existente.situacao = situacao;
+      existente.tomado_em = tomadoEm;
+      existente.observacao = observacao;
+      existente.usuario_id = usuarioId;
+
+      const atualizado = await existente.save();
+      return this.formatar(atualizado);
     }
 
-    const [resultado] = await pool.query(
-      `INSERT INTO registros_doses
-         (medicamento_id, usuario_id, horario_agendado, tomado_em, situacao, data_dose, observacao)
-       VALUES (?,?,?,?,?,?,?)`,
-      [medicamentoId, usuarioId, horarioAgendado, tomadoEm, situacao, hoje, observacao]
-    );
-    const [criado] = await pool.query('SELECT * FROM registros_doses WHERE id = ?', [resultado.insertId]);
-    return this.formatar(criado[0]);
+    const novoRegistro = await RegistroDose.create({
+      medicamento_id: medicamentoId,
+      usuario_id: usuarioId,
+      horario_agendado: horarioAgendado,
+      tomado_em: tomadoEm,
+      situacao,
+      data_dose: hoje,
+      observacao,
+    });
+
+    return this.formatar(novoRegistro);
   },
 
   async taxaAdesao(usuarioId, dias = 7) {
-    const [linhas] = await pool.query(
-      `SELECT COUNT(*) AS total, SUM(situacao = 'tomada') AS tomadas
-       FROM registros_doses
-       WHERE usuario_id = ? AND data_dose >= DATE_SUB(CURDATE(), INTERVAL ? DAY)`,
-      [usuarioId, dias]
-    );
-    const { total, tomadas } = linhas[0];
+    if (!mongoose.Types.ObjectId.isValid(usuarioId)) return 100;
+
+    const dataLimite = new Date();
+    dataLimite.setDate(dataLimite.getDate() - parseInt(dias));
+    const limiteStr = dataLimite.toISOString().split('T')[0];
+
+    const filtro = {
+      usuario_id: usuarioId,
+      data_dose: { $gte: limiteStr },
+    };
+
+    const total = await RegistroDose.countDocuments(filtro);
     if (!total) return 100;
+
+    const tomadas = await RegistroDose.countDocuments({ ...filtro, situacao: 'tomada' });
     return Math.round((tomadas / total) * 100);
   },
 
   async excluirPorMedicamento(medicamentoId, usuarioId) {
-    await pool.query(
-      'DELETE FROM registros_doses WHERE medicamento_id = ? AND usuario_id = ?',
-      [medicamentoId, usuarioId]
-    );
+    if (!mongoose.Types.ObjectId.isValid(medicamentoId) || !mongoose.Types.ObjectId.isValid(usuarioId)) {
+      return;
+    }
+
+    await RegistroDose.deleteMany({
+      medicamento_id: medicamentoId,
+      usuario_id: usuarioId,
+    });
   },
 };
 

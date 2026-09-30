@@ -1,8 +1,8 @@
 const router = require('express').Router();
 const { body } = require('express-validator');
-const ctrl = require('../controllers/MedicationController');
-const autenticar = require('../middleware/auth');
-const validar = require('../middleware/validate');
+const ctrl = require('../controllers/MedicationController.js');
+const autenticar = require('../middleware/auth.js');
+const validar = require('../middleware/validate.js');
 
 router.use(autenticar);
 
