@@ -3,12 +3,8 @@ const router = require('express').Router();
 const { body } = require('express-validator');
 
 const ctrl = require('../controllers/MedicationController.js');
-
-const autenticar =
-  require('../middleware/auth.js');
-
-const validar =
-  require('../middleware/validate.js');
+const autenticar = require('../middleware/auth.js');
+const validar = require('../middleware/validate.js');
 
 router.use(autenticar);
 
@@ -79,7 +75,9 @@ const validacoesMedicamento = [
     ),
 
   body('urlImagem')
-    .optional({ nullable: true })
+    .optional({
+      nullable: true,
+    })
     .custom((val) => {
       if (!val || val === '') {
         return true;
@@ -96,9 +94,15 @@ const validacoesMedicamento = [
     }),
 ];
 
-router.get('/', ctrl.listar);
+router.get(
+  '/',
+  ctrl.listar
+);
 
-router.get('/:id', ctrl.buscar);
+router.get(
+  '/:id',
+  ctrl.buscar
+);
 
 router.post(
   '/',

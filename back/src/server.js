@@ -4,47 +4,28 @@ const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 
-const conectarBanco =
-  require('./config/database');
+const conectarBanco = require('./config/database');
 
-const rotasAuth =
-  require('./routes/authRoutes.js');
-
-const rotasUsuarios =
-  require('./routes/usuarioRoutes.js');
-
-const rotasMedicamentos =
-  require('./routes/medicationRoutes.js');
-
-const rotasRegistros =
-  require('./routes/logRoutes.js');
+const rotasAuth = require('./routes/authRoutes.js');
+const rotasUsuarios = require('./routes/usuarioRoutes.js');
+const rotasMedicamentos = require('./routes/medicationRoutes.js');
+const rotasRegistros = require('./routes/logRoutes.js');
 
 const {
   tratarErro,
   rotaNaoEncontrada,
-} =
-  require('./middleware/errorHandler.js');
+} = require('./middleware/errorHandler.js');
 
 const app = express();
 
 const PORTA =
   process.env.PORT || 3001;
 
-/*
- * Banco
- */
 conectarBanco();
 
-/*
- * CORS
- *
- * Para começar, podemos aceitar qualquer origem.
- * Como o frontend usa Authorization Bearer
- * e não cookies, isso funciona.
- */
 app.use(
   cors({
-    origin: true,
+    origin: '*',
     methods: [
       'GET',
       'POST',
@@ -72,9 +53,6 @@ app.use(
   })
 );
 
-/*
- * Rate limit geral
- */
 const limitadorGeral =
   rateLimit({
     windowMs:
@@ -89,7 +67,7 @@ const limitadorGeral =
     message: {
       sucesso: false,
       mensagem:
-        'Muitas requisições. Tente novamente em 15 minutos.',
+        'Muitas requisicoes. Tente novamente em 15 minutos.',
     },
   });
 
@@ -98,9 +76,6 @@ app.use(
   limitadorGeral
 );
 
-/*
- * Rate limit de autenticação
- */
 const limitadorAuth =
   rateLimit({
     windowMs:
@@ -124,9 +99,6 @@ app.use(
   limitadorAuth
 );
 
-/*
- * Health check
- */
 app.get(
   '/api/health',
   (req, res) => {
@@ -143,9 +115,6 @@ app.get(
   }
 );
 
-/*
- * Rotas
- */
 app.use(
   '/api/auth',
   rotasAuth
@@ -166,9 +135,6 @@ app.use(
   rotasRegistros
 );
 
-/*
- * Erros
- */
 app.use(
   rotaNaoEncontrada
 );
@@ -179,6 +145,7 @@ app.use(
 
 app.listen(
   PORTA,
+  '0.0.0.0',
   () => {
     console.log(
       `MedSync API rodando na porta ${PORTA}`

@@ -1,56 +1,54 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
-const usuarioSchema =
-  new mongoose.Schema(
-    {
-      nome: {
-        type: String,
-        required: true,
-        trim: true,
-      },
-
-      email: {
-        type: String,
-        required: true,
-        unique: true,
-        lowercase: true,
-        trim: true,
-      },
-
-      senha: {
-        type: String,
-        required: true,
-      },
-
-      avatar: {
-        type: String,
-        default: null,
-      },
-
-      resetPasswordToken: {
-        type: String,
-        default: null,
-      },
-
-      resetPasswordExpires: {
-        type: Date,
-        default: null,
-      },
+const usuarioSchema = new mongoose.Schema(
+  {
+    nome: {
+      type: String,
+      required: true,
+      trim: true,
     },
-    {
-      timestamps: {
-        createdAt: 'criado_em',
-        updatedAt: 'atualizado_em',
-      },
-    }
-  );
 
-const Usuario =
-  mongoose.model(
-    'Usuario',
-    usuarioSchema
-  );
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+    },
+
+    senha: {
+      type: String,
+      required: true,
+    },
+
+    avatar: {
+      type: String,
+      default: null,
+    },
+
+    resetPasswordToken: {
+      type: String,
+      default: null,
+    },
+
+    resetPasswordExpires: {
+      type: Date,
+      default: null,
+    },
+  },
+  {
+    timestamps: {
+      createdAt: 'criado_em',
+      updatedAt: 'atualizado_em',
+    },
+  }
+);
+
+const Usuario = mongoose.model(
+  'Usuario',
+  usuarioSchema
+);
 
 const UsuarioModel = {
   async buscarPorEmail(email) {
@@ -58,122 +56,83 @@ const UsuarioModel = {
       return null;
     }
 
-    return Usuario.findOne({
-      email: email
-        .toLowerCase()
-        .trim(),
+    return await Usuario.findOne({
+      email: email.toLowerCase().trim(),
     });
   },
 
   async buscarPorId(id) {
-    if (
-      !mongoose.Types.ObjectId.isValid(
-        id
-      )
-    ) {
+    if (!id) {
       return null;
     }
 
-    return Usuario.findById(id);
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return null;
+    }
+
+    return await Usuario.findById(id);
   },
 
-  async criar({
-    nome,
-    email,
-    senha,
-  }) {
-    const rounds = parseInt(
-      process.env.BCRYPT_ROUNDS ||
-        '12',
-      10
+  async criar({ nome, email, senha }) {
+    const hash = await bcrypt.hash(
+      senha,
+      parseInt(
+        process.env.BCRYPT_ROUNDS || '12',
+        10
+      )
     );
 
-    const hash =
-      await bcrypt.hash(
-        senha,
-        rounds
-      );
+    const novoUsuario = new Usuario({
+      nome: nome.trim(),
+      email: email.toLowerCase().trim(),
+      senha: hash,
+    });
 
-    const novoUsuario =
-      new Usuario({
-        nome: nome.trim(),
-        email: email
-          .toLowerCase()
-          .trim(),
-        senha: hash,
-      });
-
-    return novoUsuario.save();
+    return await novoUsuario.save();
   },
 
-  async atualizar(
-    id,
-    {
-      nome,
-      avatar,
-    }
-  ) {
-    if (
-      !mongoose.Types.ObjectId.isValid(
-        id
-      )
-    ) {
+  async atualizar(id, { nome, avatar }) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
       return null;
     }
 
     const camposAtualizacao = {};
 
     if (nome !== undefined) {
-      camposAtualizacao.nome =
-        nome.trim();
+      camposAtualizacao.nome = nome.trim();
     }
 
     if (avatar !== undefined) {
-      camposAtualizacao.avatar =
-        avatar;
+      camposAtualizacao.avatar = avatar;
     }
 
     if (
-      Object.keys(
-        camposAtualizacao
-      ).length === 0
+      Object.keys(camposAtualizacao).length === 0
     ) {
       return this.buscarPorId(id);
     }
 
-    return Usuario.findByIdAndUpdate(
+    return await Usuario.findByIdAndUpdate(
       id,
       camposAtualizacao,
       {
         new: true,
-        runValidators: true,
       }
     );
   },
 
-  async alterarSenha(
-    id,
-    novaSenha
-  ) {
-    if (
-      !mongoose.Types.ObjectId.isValid(
-        id
-      )
-    ) {
+  async alterarSenha(id, novaSenha) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
       return;
     }
 
-    const rounds = parseInt(
-      process.env.BCRYPT_ROUNDS ||
-        '12',
-      10
+    const hash = await bcrypt.hash(
+      novaSenha,
+      parseInt(
+        process.env.BCRYPT_ROUNDS || '12',
+        10
+      )
     );
-
-    const hash =
-      await bcrypt.hash(
-        novaSenha,
-        rounds
-      );
 
     await Usuario.findByIdAndUpdate(
       id,
@@ -183,10 +142,7 @@ const UsuarioModel = {
     );
   },
 
-  async verificarSenha(
-    textoPlano,
-    hash
-  ) {
+  async verificarSenha(textoPlano, hash) {
     return bcrypt.compare(
       textoPlano,
       hash
@@ -199,20 +155,19 @@ const UsuarioModel = {
     }
 
     return {
-      id: usuario._id.toString(),
+      id: usuario._id
+        ? usuario._id.toString()
+        : usuario.id,
 
       nome: usuario.nome,
 
       email: usuario.email,
 
-      avatar:
-        usuario.avatar || null,
+      avatar: usuario.avatar || null,
 
-      criadoEm:
-        usuario.criado_em,
+      criadoEm: usuario.criado_em,
     };
   },
 };
 
-module.exports =
-  UsuarioModel;
+module.exports = UsuarioModel;

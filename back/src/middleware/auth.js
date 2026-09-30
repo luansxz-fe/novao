@@ -23,7 +23,7 @@ async function autenticar(req, res, next) {
     }
 
     if (!process.env.JWT_SECRET) {
-      console.error('JWT_SECRET não configurado no servidor');
+      console.error('JWT_SECRET não configurado');
 
       return res.status(500).json({
         sucesso: false,
@@ -43,16 +43,16 @@ async function autenticar(req, res, next) {
       });
     }
 
-    const idUsuario = String(decodificado.id);
+    const usuarioId = decodificado.id.toString();
 
-    if (!mongoose.Types.ObjectId.isValid(idUsuario)) {
+    if (!mongoose.Types.ObjectId.isValid(usuarioId)) {
       return res.status(401).json({
         sucesso: false,
         mensagem: 'ID de usuário inválido',
       });
     }
 
-    const usuario = await UsuarioModel.buscarPorId(idUsuario);
+    const usuario = await UsuarioModel.buscarPorId(usuarioId);
 
     if (!usuario) {
       return res.status(401).json({
@@ -61,22 +61,15 @@ async function autenticar(req, res, next) {
       });
     }
 
-    /*
-     * IMPORTANTE:
-     * O usuário é reconstruído a partir do banco.
-     * Nunca confiamos em um userId enviado pelo frontend.
-     */
-    req.usuario = UsuarioModel.formatar(usuario);
-
-    /*
-     * Guardamos também o ObjectId original.
-     * Isso facilita usar o ID diretamente nos models.
-     */
+    // ID oficial do usuário autenticado
     req.usuarioId = usuario._id.toString();
+
+    // Dados do usuário
+    req.usuario = usuario;
 
     next();
   } catch (erro) {
-    console.error('Erro na autenticação:', erro.message);
+    console.error('Erro de autenticação:', erro.message);
 
     if (erro.name === 'TokenExpiredError') {
       return res.status(401).json({
@@ -85,10 +78,7 @@ async function autenticar(req, res, next) {
       });
     }
 
-    if (
-      erro.name === 'JsonWebTokenError' ||
-      erro.name === 'NotBeforeError'
-    ) {
+    if (erro.name === 'JsonWebTokenError') {
       return res.status(401).json({
         sucesso: false,
         mensagem: 'Token inválido',

@@ -103,6 +103,7 @@ const medicamentoSchema = new mongoose.Schema(
       default: null,
     },
   },
+
   {
     timestamps: {
       createdAt: 'criado_em',
@@ -111,55 +112,46 @@ const medicamentoSchema = new mongoose.Schema(
   }
 );
 
-medicamentoSchema.index({
-  usuario_id: 1,
-  criado_em: -1,
-});
-
-medicamentoSchema.index({
-  usuario_id: 1,
-  ativo: 1,
-});
-
-const Medicamento =
-  mongoose.model(
-    'Medicamento',
-    medicamentoSchema
-  );
-
-function validarUsuarioId(usuarioId) {
-  return (
-    usuarioId &&
-    mongoose.Types.ObjectId.isValid(
-      String(usuarioId)
-    )
-  );
-}
-
-function formatarData(valor) {
-  if (!valor) return null;
-
-  if (valor instanceof Date) {
-    return valor.toISOString().split('T')[0];
-  }
-
-  return String(valor).slice(0, 10);
-}
+const Medicamento = mongoose.model(
+  'Medicamento',
+  medicamentoSchema
+);
 
 const MedicamentoModel = {
   formatar(doc) {
-    if (!doc) return null;
+    if (!doc) {
+      return null;
+    }
+
+    const formatarData = (valor) => {
+      if (!valor) {
+        return null;
+      }
+
+      if (valor instanceof Date) {
+        return valor
+          .toISOString()
+          .split('T')[0];
+      }
+
+      return valor;
+    };
 
     return {
-      id: doc._id.toString(),
+      id: doc._id
+        ? doc._id.toString()
+        : doc.id,
 
       usuarioId: doc.usuario_id
         ? doc.usuario_id.toString()
-        : null,
+        : doc.usuarioId,
 
       nome: doc.nome,
+
       dosagem: doc.dosagem,
+
       unidade: doc.unidade,
+
       frequencia: doc.frequencia,
 
       horarios: Array.isArray(doc.horarios)
@@ -174,27 +166,23 @@ const MedicamentoModel = {
         doc.data_termino
       ),
 
-      instrucoes:
-        doc.instrucoes || null,
+      instrucoes: doc.instrucoes || null,
 
       cor: doc.cor,
+
       icone: doc.icone,
+
       categoria: doc.categoria,
 
-      estoqueAtual:
-        doc.estoque_atual,
+      estoqueAtual: doc.estoque_atual,
 
-      estoqueMaximo:
-        doc.estoque_maximo,
+      estoqueMaximo: doc.estoque_maximo,
 
-      lembreteAtivo:
-        !!doc.lembrete_ativo,
+      lembreteAtivo: !!doc.lembrete_ativo,
 
-      ativo:
-        !!doc.ativo,
+      ativo: !!doc.ativo,
 
-      urlImagem:
-        doc.url_imagem || null,
+      urlImagem: doc.url_imagem || null,
 
       medicoPrescritor:
         doc.medico_prescritor || null,
@@ -210,20 +198,21 @@ const MedicamentoModel = {
   },
 
   async listarPorUsuario(usuarioId) {
-    if (!validarUsuarioId(usuarioId)) {
+    if (
+      !mongoose.Types.ObjectId.isValid(
+        usuarioId
+      )
+    ) {
       return [];
     }
 
     const documentos =
       await Medicamento.find({
-        usuario_id: new mongoose.Types.ObjectId(
-          String(usuarioId)
-        ),
+        usuario_id: usuarioId,
       })
         .sort({
           criado_em: -1,
-        })
-        .lean();
+        });
 
     return documentos.map(
       (doc) => this.formatar(doc)
@@ -233,7 +222,7 @@ const MedicamentoModel = {
   async buscarUm(id, usuarioId) {
     if (
       !mongoose.Types.ObjectId.isValid(id) ||
-      !validarUsuarioId(usuarioId)
+      !mongoose.Types.ObjectId.isValid(usuarioId)
     ) {
       return null;
     }
@@ -241,36 +230,35 @@ const MedicamentoModel = {
     const doc =
       await Medicamento.findOne({
         _id: id,
-        usuario_id:
-          new mongoose.Types.ObjectId(
-            String(usuarioId)
-          ),
-      }).lean();
+        usuario_id: usuarioId,
+      });
 
     return this.formatar(doc);
   },
 
   async criar(usuarioId, dados) {
-    if (!validarUsuarioId(usuarioId)) {
+    if (
+      !mongoose.Types.ObjectId.isValid(
+        usuarioId
+      )
+    ) {
       throw new Error(
-        'Usuário inválido para criar medicamento'
+        'ID do usuário inválido'
       );
     }
 
     const novoMedicamento =
       new Medicamento({
-        /*
-         * NUNCA pegamos usuarioId do body.
-         * Sempre vem do JWT.
-         */
-        usuario_id:
-          new mongoose.Types.ObjectId(
-            String(usuarioId)
-          ),
+        // IMPORTANTE:
+        // vem do JWT, não do frontend
+        usuario_id: usuarioId,
 
         nome: dados.nome,
+
         dosagem: dados.dosagem,
+
         unidade: dados.unidade,
+
         frequencia: dados.frequencia,
 
         horarios: Array.isArray(
@@ -279,8 +267,7 @@ const MedicamentoModel = {
           ? dados.horarios
           : [],
 
-        data_inicio:
-          dados.dataInicio,
+        data_inicio: dados.dataInicio,
 
         data_termino:
           dados.dataTermino || null,
@@ -288,14 +275,11 @@ const MedicamentoModel = {
         instrucoes:
           dados.instrucoes || null,
 
-        cor:
-          dados.cor || '#3b82f6',
+        cor: dados.cor,
 
-        icone:
-          dados.icone || 'Pill',
+        icone: dados.icone,
 
-        categoria:
-          dados.categoria || 'Geral',
+        categoria: dados.categoria,
 
         estoque_atual:
           dados.estoqueAtual ?? 30,
@@ -334,7 +318,7 @@ const MedicamentoModel = {
   ) {
     if (
       !mongoose.Types.ObjectId.isValid(id) ||
-      !validarUsuarioId(usuarioId)
+      !mongoose.Types.ObjectId.isValid(usuarioId)
     ) {
       return null;
     }
@@ -356,7 +340,8 @@ const MedicamentoModel = {
       lembreteAtivo: 'lembrete_ativo',
       ativo: 'ativo',
       urlImagem: 'url_imagem',
-      medicoPrescritor: 'medico_prescritor',
+      medicoPrescritor:
+        'medico_prescritor',
       efeitosColaterais:
         'efeitos_colaterais',
     };
@@ -367,7 +352,9 @@ const MedicamentoModel = {
       const [chave, campoDoc]
       of Object.entries(mapaCampos)
     ) {
-      if (dados[chave] === undefined) {
+      if (
+        dados[chave] === undefined
+      ) {
         continue;
       }
 
@@ -377,7 +364,8 @@ const MedicamentoModel = {
         valor = null;
       }
 
-      atualizacao[campoDoc] = valor;
+      atualizacao[campoDoc] =
+        valor;
     }
 
     if (
@@ -389,24 +377,14 @@ const MedicamentoModel = {
       );
     }
 
-    /*
-     * O filtro contém:
-     *
-     * _id = medicamento
-     * usuario_id = usuário autenticado
-     *
-     * Portanto um usuário não consegue
-     * atualizar o medicamento de outro.
-     */
+    // IMPORTANTE:
+    // o ID do medicamento E o ID do usuário
+    // precisam coincidir.
     const docAtualizado =
       await Medicamento.findOneAndUpdate(
         {
           _id: id,
-
-          usuario_id:
-            new mongoose.Types.ObjectId(
-              String(usuarioId)
-            ),
+          usuario_id: usuarioId,
         },
         {
           $set: atualizacao,
@@ -422,13 +400,10 @@ const MedicamentoModel = {
     );
   },
 
-  async excluir(
-    id,
-    usuarioId
-  ) {
+  async excluir(id, usuarioId) {
     if (
       !mongoose.Types.ObjectId.isValid(id) ||
-      !validarUsuarioId(usuarioId)
+      !mongoose.Types.ObjectId.isValid(usuarioId)
     ) {
       return false;
     }
@@ -437,13 +412,13 @@ const MedicamentoModel = {
       await Medicamento.deleteOne({
         _id: id,
 
-        usuario_id:
-          new mongoose.Types.ObjectId(
-            String(usuarioId)
-          ),
+        // MUITO IMPORTANTE
+        usuario_id: usuarioId,
       });
 
-    return resultado.deletedCount > 0;
+    return (
+      resultado.deletedCount > 0
+    );
   },
 };
 

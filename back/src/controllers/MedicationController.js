@@ -1,191 +1,425 @@
-const MedicamentoModel = require('../models/MedicationModel');
-const RegistroDoseModel = require('../models/LogModel');
+const mongoose = require('mongoose');
 
-const MedicamentoController = {
-  async listar(req, res, next) {
-    try {
-      const usuarioId = req.usuarioId;
+const medicamentoSchema = new mongoose.Schema(
+  {
+    usuario_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Usuario',
+      required: true,
+      index: true,
+    },
 
-      const medicamentos =
-        await MedicamentoModel.listarPorUsuario(
-          usuarioId
-        );
+    nome: {
+      type: String,
+      required: true,
+      trim: true,
+    },
 
-      return res.json({
-        sucesso: true,
-        dados: medicamentos,
-      });
-    } catch (erro) {
-      next(erro);
-    }
+    dosagem: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    unidade: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    frequencia: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    horarios: {
+      type: [String],
+      default: [],
+    },
+
+    data_inicio: {
+      type: Date,
+      required: true,
+    },
+
+    data_termino: {
+      type: Date,
+      default: null,
+    },
+
+    instrucoes: {
+      type: String,
+      default: null,
+    },
+
+    cor: {
+      type: String,
+      required: true,
+    },
+
+    icone: {
+      type: String,
+      required: true,
+    },
+
+    categoria: {
+      type: String,
+      required: true,
+    },
+
+    estoque_atual: {
+      type: Number,
+      default: 30,
+    },
+
+    estoque_maximo: {
+      type: Number,
+      default: 30,
+    },
+
+    lembrete_ativo: {
+      type: Boolean,
+      default: true,
+    },
+
+    ativo: {
+      type: Boolean,
+      default: true,
+    },
+
+    url_imagem: {
+      type: String,
+      default: null,
+    },
+
+    medico_prescritor: {
+      type: String,
+      default: null,
+    },
+
+    efeitos_colaterais: {
+      type: String,
+      default: null,
+    },
   },
 
-  async buscar(req, res, next) {
-    try {
-      const medicamento =
-        await MedicamentoModel.buscarUm(
-          req.params.id,
-          req.usuarioId
-        );
+  {
+    timestamps: {
+      createdAt: 'criado_em',
+      updatedAt: 'atualizado_em',
+    },
+  }
+);
 
-      if (!medicamento) {
-        return res.status(404).json({
-          sucesso: false,
-          mensagem: 'Medicamento não encontrado',
-        });
+const Medicamento = mongoose.model(
+  'Medicamento',
+  medicamentoSchema
+);
+
+const MedicamentoModel = {
+  formatar(doc) {
+    if (!doc) {
+      return null;
+    }
+
+    const formatarData = (valor) => {
+      if (!valor) {
+        return null;
       }
 
-      return res.json({
-        sucesso: true,
-        dados: medicamento,
-      });
-    } catch (erro) {
-      next(erro);
-    }
+      if (valor instanceof Date) {
+        return valor
+          .toISOString()
+          .split('T')[0];
+      }
+
+      return valor;
+    };
+
+    return {
+      id: doc._id
+        ? doc._id.toString()
+        : doc.id,
+
+      usuarioId: doc.usuario_id
+        ? doc.usuario_id.toString()
+        : doc.usuarioId,
+
+      nome: doc.nome,
+
+      dosagem: doc.dosagem,
+
+      unidade: doc.unidade,
+
+      frequencia: doc.frequencia,
+
+      horarios: Array.isArray(doc.horarios)
+        ? doc.horarios
+        : [],
+
+      dataInicio: formatarData(
+        doc.data_inicio
+      ),
+
+      dataTermino: formatarData(
+        doc.data_termino
+      ),
+
+      instrucoes: doc.instrucoes || null,
+
+      cor: doc.cor,
+
+      icone: doc.icone,
+
+      categoria: doc.categoria,
+
+      estoqueAtual: doc.estoque_atual,
+
+      estoqueMaximo: doc.estoque_maximo,
+
+      lembreteAtivo: !!doc.lembrete_ativo,
+
+      ativo: !!doc.ativo,
+
+      urlImagem: doc.url_imagem || null,
+
+      medicoPrescritor:
+        doc.medico_prescritor || null,
+
+      efeitosColaterais:
+        doc.efeitos_colaterais || null,
+
+      criadoEm:
+        doc.criado_em instanceof Date
+          ? doc.criado_em.toISOString()
+          : doc.criado_em,
+    };
   },
 
-  async criar(req, res, next) {
-    try {
-      const medicamento =
-        await MedicamentoModel.criar(
-          req.usuarioId,
-          req.body
-        );
-
-      if (!medicamento) {
-        return res.status(400).json({
-          sucesso: false,
-          mensagem: 'Não foi possível criar o medicamento',
-        });
-      }
-
-      return res.status(201).json({
-        sucesso: true,
-        mensagem: 'Medicamento criado',
-        dados: medicamento,
-      });
-    } catch (erro) {
-      next(erro);
+  async listarPorUsuario(usuarioId) {
+    if (
+      !mongoose.Types.ObjectId.isValid(
+        usuarioId
+      )
+    ) {
+      return [];
     }
+
+    const documentos =
+      await Medicamento.find({
+        usuario_id: usuarioId,
+      })
+        .sort({
+          criado_em: -1,
+        });
+
+    return documentos.map(
+      (doc) => this.formatar(doc)
+    );
   },
 
-  async atualizar(req, res, next) {
-    try {
-      const existe =
-        await MedicamentoModel.buscarUm(
-          req.params.id,
-          req.usuarioId
-        );
-
-      if (!existe) {
-        return res.status(404).json({
-          sucesso: false,
-          mensagem: 'Medicamento não encontrado',
-        });
-      }
-
-      const medicamento =
-        await MedicamentoModel.atualizar(
-          req.params.id,
-          req.usuarioId,
-          req.body
-        );
-
-      return res.json({
-        sucesso: true,
-        mensagem: 'Medicamento atualizado',
-        dados: medicamento,
-      });
-    } catch (erro) {
-      next(erro);
+  async buscarUm(id, usuarioId) {
+    if (
+      !mongoose.Types.ObjectId.isValid(id) ||
+      !mongoose.Types.ObjectId.isValid(usuarioId)
+    ) {
+      return null;
     }
+
+    const doc =
+      await Medicamento.findOne({
+        _id: id,
+        usuario_id: usuarioId,
+      });
+
+    return this.formatar(doc);
   },
 
-  async excluir(req, res, next) {
-    try {
-      /*
-       * Primeiro verificamos se o medicamento pertence
-       * ao usuário autenticado.
-       */
-      const medicamento =
-        await MedicamentoModel.buscarUm(
-          req.params.id,
-          req.usuarioId
-        );
+  async criar(usuarioId, dados) {
+    if (
+      !mongoose.Types.ObjectId.isValid(
+        usuarioId
+      )
+    ) {
+      throw new Error(
+        'ID do usuário inválido'
+      );
+    }
 
-      if (!medicamento) {
-        return res.status(404).json({
-          sucesso: false,
-          mensagem: 'Medicamento não encontrado',
-        });
+    const novoMedicamento =
+      new Medicamento({
+        // IMPORTANTE:
+        // vem do JWT, não do frontend
+        usuario_id: usuarioId,
+
+        nome: dados.nome,
+
+        dosagem: dados.dosagem,
+
+        unidade: dados.unidade,
+
+        frequencia: dados.frequencia,
+
+        horarios: Array.isArray(
+          dados.horarios
+        )
+          ? dados.horarios
+          : [],
+
+        data_inicio: dados.dataInicio,
+
+        data_termino:
+          dados.dataTermino || null,
+
+        instrucoes:
+          dados.instrucoes || null,
+
+        cor: dados.cor,
+
+        icone: dados.icone,
+
+        categoria: dados.categoria,
+
+        estoque_atual:
+          dados.estoqueAtual ?? 30,
+
+        estoque_maximo:
+          dados.estoqueMaximo ?? 30,
+
+        lembrete_ativo:
+          dados.lembreteAtivo !== undefined
+            ? !!dados.lembreteAtivo
+            : true,
+
+        ativo:
+          dados.ativo !== false,
+
+        url_imagem:
+          dados.urlImagem || null,
+
+        medico_prescritor:
+          dados.medicoPrescritor || null,
+
+        efeitos_colaterais:
+          dados.efeitosColaterais || null,
+      });
+
+    const salvo =
+      await novoMedicamento.save();
+
+    return this.formatar(salvo);
+  },
+
+  async atualizar(
+    id,
+    usuarioId,
+    dados
+  ) {
+    if (
+      !mongoose.Types.ObjectId.isValid(id) ||
+      !mongoose.Types.ObjectId.isValid(usuarioId)
+    ) {
+      return null;
+    }
+
+    const mapaCampos = {
+      nome: 'nome',
+      dosagem: 'dosagem',
+      unidade: 'unidade',
+      frequencia: 'frequencia',
+      horarios: 'horarios',
+      dataInicio: 'data_inicio',
+      dataTermino: 'data_termino',
+      instrucoes: 'instrucoes',
+      cor: 'cor',
+      icone: 'icone',
+      categoria: 'categoria',
+      estoqueAtual: 'estoque_atual',
+      estoqueMaximo: 'estoque_maximo',
+      lembreteAtivo: 'lembrete_ativo',
+      ativo: 'ativo',
+      urlImagem: 'url_imagem',
+      medicoPrescritor:
+        'medico_prescritor',
+      efeitosColaterais:
+        'efeitos_colaterais',
+    };
+
+    const atualizacao = {};
+
+    for (
+      const [chave, campoDoc]
+      of Object.entries(mapaCampos)
+    ) {
+      if (
+        dados[chave] === undefined
+      ) {
+        continue;
       }
 
-      /*
-       * Os registros de doses também são apagados
-       * somente para esse usuário/medicamento.
-       */
-      await RegistroDoseModel.excluirPorMedicamento(
-        req.params.id,
-        req.usuarioId
+      let valor = dados[chave];
+
+      if (valor === '') {
+        valor = null;
+      }
+
+      atualizacao[campoDoc] =
+        valor;
+    }
+
+    if (
+      Object.keys(atualizacao).length === 0
+    ) {
+      return this.buscarUm(
+        id,
+        usuarioId
+      );
+    }
+
+    // IMPORTANTE:
+    // o ID do medicamento E o ID do usuário
+    // precisam coincidir.
+    const docAtualizado =
+      await Medicamento.findOneAndUpdate(
+        {
+          _id: id,
+          usuario_id: usuarioId,
+        },
+        {
+          $set: atualizacao,
+        },
+        {
+          new: true,
+          runValidators: true,
+        }
       );
 
-      const excluido =
-        await MedicamentoModel.excluir(
-          req.params.id,
-          req.usuarioId
-        );
-
-      if (!excluido) {
-        return res.status(404).json({
-          sucesso: false,
-          mensagem: 'Medicamento não encontrado',
-        });
-      }
-
-      return res.json({
-        sucesso: true,
-        mensagem: 'Medicamento excluído',
-      });
-    } catch (erro) {
-      next(erro);
-    }
+    return this.formatar(
+      docAtualizado
+    );
   },
 
-  async alternarAtivo(req, res, next) {
-    try {
-      const medicamento =
-        await MedicamentoModel.buscarUm(
-          req.params.id,
-          req.usuarioId
-        );
-
-      if (!medicamento) {
-        return res.status(404).json({
-          sucesso: false,
-          mensagem: 'Medicamento não encontrado',
-        });
-      }
-
-      const atualizado =
-        await MedicamentoModel.atualizar(
-          req.params.id,
-          req.usuarioId,
-          {
-            ativo: !medicamento.ativo,
-          }
-        );
-
-      return res.json({
-        sucesso: true,
-        mensagem: atualizado.ativo
-          ? 'Medicamento ativado'
-          : 'Medicamento desativado',
-        dados: atualizado,
-      });
-    } catch (erro) {
-      next(erro);
+  async excluir(id, usuarioId) {
+    if (
+      !mongoose.Types.ObjectId.isValid(id) ||
+      !mongoose.Types.ObjectId.isValid(usuarioId)
+    ) {
+      return false;
     }
+
+    const resultado =
+      await Medicamento.deleteOne({
+        _id: id,
+
+        // MUITO IMPORTANTE
+        usuario_id: usuarioId,
+      });
+
+    return (
+      resultado.deletedCount > 0
+    );
   },
 };
 
-module.exports = MedicamentoController;
+module.exports = MedicamentoModel;
