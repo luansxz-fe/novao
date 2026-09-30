@@ -55,7 +55,6 @@ const isTimePassed = (timeStr: string) => {
 };
 
 export const MedProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Inicializa o estado diretamente do localStorage para não perder nada ao atualizar
   const [medications, setMedications] = useState<Medication[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_MEDS);
@@ -76,12 +75,10 @@ export const MedProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [adherence, setAdherence] = useState<{ dias7: number; dias30: number }>({ dias7: 100, dias30: 100 });
 
-  // Salva no localStorage sempre que os medicamentos mudarem
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_MEDS, JSON.stringify(medications));
   }, [medications]);
 
-  // Salva no localStorage sempre que os logs mudarem
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(logs));
   }, [logs]);
@@ -96,17 +93,17 @@ export const MedProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unit: item.unidade || item.unit || 'mg',
       frequency: item.frequencia || item.frequency || 'Diário',
       times: item.horarios || item.times || [],
-      stock: Number(item.estoque ?? item.stock ?? 0),
-      stockMax: item.estoqueMaximo || item.stockMax ? Number(item.estoqueMaximo || item.stockMax) : undefined,
+      stock: Number(item.estoqueAtual ?? item.estoque ?? item.stock ?? 0),
+      stockMax: Number(item.estoqueMaximo ?? item.stockMax ?? 30),
       active: item.ativo ?? item.active ?? true,
       color: item.cor || item.color || '#3b82f6',
-      category: item.categoria || item.category || 'Outros',
-      icon: item.icon,
-      imageUrl: item.imageUrl || item.imagemUrl,
-      prescribedBy: item.medico || item.prescribedBy,
-      startDate: item.dataInicio || item.startDate,
-      endDate: item.dataFim || item.endDate,
-      reminderEnabled: item.lembreteAtivo ?? item.reminderEnabled,
+      category: item.categoria || item.category || 'Geral',
+      icon: item.icone || item.icon || 'Pill',
+      imageUrl: item.urlImagem || item.imageUrl || item.imagemUrl,
+      prescribedBy: item.medicoPrescritor || item.medico || item.prescribedBy,
+      startDate: item.dataInicio || item.startDate || getTodayString(),
+      endDate: item.dataTermino || item.endDate,
+      reminderEnabled: item.lembreteAtivo ?? item.reminderEnabled ?? true,
       instructions: item.instrucoes || item.instructions,
       sideEffects: item.efeitosColaterais || item.sideEffects,
     };
@@ -139,19 +136,29 @@ export const MedProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   };
 
-  const parseToApiPayload = (med: any) => ({
-    nome: med.name || med.nome,
-    dosagem: med.dosage || med.dosagem,
-    unidade: med.unit || med.unidade,
-    frequencia: med.frequency || med.frequencia,
-    horarios: med.times || med.horarios,
-    estoque: med.stock ?? med.estoque,
-    cor: med.color || med.cor,
-    categoria: med.category || med.categoria,
-    ativo: med.active ?? med.ativo ?? true,
-    medico: med.prescribedBy || med.medico,
-    instrucoes: med.instructions || med.instrucoes
-  });
+  // Mapeia corretamente os campos exigidos pela validação do Backend
+  const parseToApiPayload = (med: any) => {
+    return {
+      nome: med.name || med.nome,
+      dosagem: med.dosage || med.dosagem,
+      unidade: med.unit || med.unidade || 'mg',
+      frequencia: med.frequency || med.frequencia || 'Diário',
+      horarios: med.times || med.horarios || [],
+      dataInicio: med.startDate || med.dataInicio || getTodayString(),
+      dataTermino: med.endDate || med.dataTermino || null,
+      cor: med.color || med.cor || '#3b82f6',
+      icone: med.icon || med.icone || 'Pill',
+      categoria: med.category || med.categoria || 'Geral',
+      estoqueAtual: Number(med.stock ?? med.estoqueAtual ?? med.estoque ?? 0),
+      estoqueMaximo: Number(med.stockMax ?? med.estoqueMaximo ?? 30),
+      lembreteAtivo: med.reminderEnabled ?? med.lembreteAtivo ?? true,
+      ativo: med.active ?? med.ativo ?? true,
+      urlImagem: med.imageUrl || med.urlImagem || null,
+      medicoPrescritor: med.prescribedBy || med.medicoPrescritor || med.medico || null,
+      instrucoes: med.instructions || med.instrucoes || null,
+      efeitosColaterais: med.sideEffects || med.efeitosColaterais || null,
+    };
+  };
 
   const fetchAdherence = async () => {
     try {
@@ -174,13 +181,17 @@ export const MedProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         api.registros.listar().catch(() => null)
       ]);
 
-      // Atualiza o estado via API apenas se ela retornar um array não vazio
-      if (medsRes?.dados && Array.isArray(medsRes.dados) && medsRes.dados.length > 0) {
-        setMedications(medsRes.dados.map(formatMed));
+      // Atualiza o estado SEMPRE que a resposta for um array (mesmo se vazio), para não manter cache de outro utilizador
+      if (medsRes?.dados && Array.isArray(medsRes.dados)) {
+        const formatados = medsRes.dados.map(formatMed);
+        setMedications(formatados);
+        localStorage.setItem(STORAGE_KEY_MEDS, JSON.stringify(formatados));
       }
 
-      if (logsRes?.dados && Array.isArray(logsRes.dados) && logsRes.dados.length > 0) {
-        setLogs(logsRes.dados.map(parseLog));
+      if (logsRes?.dados && Array.isArray(logsRes.dados)) {
+        const logsFormatados = logsRes.dados.map(parseLog);
+        setLogs(logsFormatados);
+        localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(logsFormatados));
       }
 
       await fetchAdherence();
@@ -194,28 +205,30 @@ export const MedProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const addMedication = async (medData: Omit<Medication, 'id'> & { id?: string; _id?: string }) => {
-    const tempId = String(Date.now());
-    const newMed = formatMed({ ...medData, id: tempId });
-    
-    setMedications(prev => [...prev, newMed]);
+    const payload = parseToApiPayload(medData);
 
     try {
-      const res = await api.medicamentos.criar(parseToApiPayload(medData));
+      const res = await api.medicamentos.criar(payload);
       if (res?.dados) {
-        setMedications(prev => prev.map(m => (m.id === tempId ? formatMed(res.dados) : m)));
+        const novoMed = formatMed(res.dados);
+        setMedications(prev => [...prev, novoMed]);
       }
     } catch (error) {
-      console.error('Erro ao criar medicamento na API (mantido localmente):', error);
+      console.error('Erro ao criar medicamento na API:', error);
+      throw error;
     }
   };
 
   const updateMedication = async (id: string, data: Partial<Medication>) => {
     if (!id) return;
-    setMedications(prev => prev.map(m => (String(m.id) === String(id) || String(m._id) === String(id)) ? { ...m, ...data } : m));
 
     try {
       const targetId = !isNaN(Number(id)) ? Number(id) : id;
-      await api.medicamentos.atualizar(targetId, parseToApiPayload(data));
+      const res = await api.medicamentos.atualizar(targetId, parseToApiPayload(data));
+      if (res?.dados) {
+        const medAtualizado = formatMed(res.dados);
+        setMedications(prev => prev.map(m => (String(m.id) === String(id) || String(m._id) === String(id)) ? medAtualizado : m));
+      }
     } catch (error) {
       console.error('Erro ao atualizar medicamento na API:', error);
     }
@@ -223,11 +236,11 @@ export const MedProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteMedication = async (id: string) => {
     if (!id) return;
-    setMedications(prev => prev.filter(m => String(m.id) !== String(id) && String(m._id) !== String(id)));
 
     try {
       const targetId = !isNaN(Number(id)) ? Number(id) : id;
       await api.medicamentos.excluir(targetId);
+      setMedications(prev => prev.filter(m => String(m.id) !== String(id) && String(m._id) !== String(id)));
     } catch (error) {
       console.error('Erro ao eliminar medicamento na API:', error);
     }
