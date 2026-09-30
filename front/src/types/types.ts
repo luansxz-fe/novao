@@ -1,3 +1,14 @@
+
+export interface User {
+  id: string;
+  _id?: string;
+  name: string;
+  nome?: string;
+  email: string;
+  createdAt?: string;
+  avatar?: string;
+}
+
 export interface Medication {
   id: string;
   _id?: string;

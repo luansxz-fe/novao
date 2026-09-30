@@ -1,3 +1,14 @@
+
+export interface User {
+  id: string;
+  _id?: string;
+  nome?: string;
+  name?: string;
+  email: string;
+  avatar?: string;
+  createdAt?: string;
+}
+
 export interface Medication {
   id: string;
   _id?: string;
@@ -27,8 +38,16 @@ export interface DoseLog {
   _id?: string;
   medicationId: string;
   scheduledTime: string;
-  status: 'taken' | 'skipped' | 'missed' | 'TOMADO' | 'PULADO' | 'PERDIDO' | string;
+  status:
+    | 'taken'
+    | 'skipped'
+    | 'missed'
+    | 'TOMADO'
+    | 'PULADO'
+    | 'PERDIDO'
+    | string;
   date: string;
+  takenAt?: string;
   notes?: string;
 }
 
