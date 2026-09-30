@@ -12,72 +12,52 @@ const validacoesMedicamento = [
   body('nome')
     .trim()
     .notEmpty()
-    .withMessage(
-      'Nome do medicamento é obrigatório'
-    ),
+    .withMessage('Nome do medicamento e obrigatorio'),
 
   body('dosagem')
     .trim()
     .notEmpty()
-    .withMessage(
-      'Dosagem é obrigatória'
-    ),
+    .withMessage('Dosagem e obrigatoria'),
 
   body('unidade')
     .trim()
     .notEmpty()
-    .withMessage(
-      'Unidade é obrigatória'
-    ),
+    .withMessage('Unidade e obrigatoria'),
 
   body('frequencia')
     .trim()
     .notEmpty()
-    .withMessage(
-      'Frequência é obrigatória'
-    ),
+    .withMessage('Frequencia e obrigatoria'),
 
   body('horarios')
     .isArray({ min: 1 })
-    .withMessage(
-      'Informe ao menos um horário'
-    ),
+    .withMessage('Informe ao menos um horario'),
 
   body('horarios.*')
     .matches(/^\d{2}:\d{2}$/)
-    .withMessage(
-      'Horário inválido, use HH:MM'
-    ),
+    .withMessage('Horario invalido, use HH:MM'),
 
   body('dataInicio')
     .isDate()
-    .withMessage(
-      'Data de início inválida'
-    ),
+    .withMessage('Data de inicio invalida'),
 
   body('cor')
     .optional()
     .matches(/^#[0-9A-Fa-f]{6}$/)
-    .withMessage('Cor inválida'),
+    .withMessage('Cor invalida'),
 
   body('estoqueAtual')
     .optional()
     .isInt({ min: 0 })
-    .withMessage(
-      'Estoque inválido'
-    ),
+    .withMessage('Estoque invalido'),
 
   body('estoqueMaximo')
     .optional()
     .isInt({ min: 1 })
-    .withMessage(
-      'Capacidade inválida'
-    ),
+    .withMessage('Capacidade invalida'),
 
   body('urlImagem')
-    .optional({
-      nullable: true,
-    })
+    .optional({ nullable: true })
     .custom((val) => {
       if (!val || val === '') {
         return true;
@@ -87,22 +67,14 @@ const validacoesMedicamento = [
         new URL(val);
         return true;
       } catch {
-        throw new Error(
-          'URL da imagem inválida'
-        );
+        throw new Error('URL da imagem invalida');
       }
     }),
 ];
 
-router.get(
-  '/',
-  ctrl.listar
-);
+router.get('/', ctrl.listar);
 
-router.get(
-  '/:id',
-  ctrl.buscar
-);
+router.get('/:id', ctrl.buscar);
 
 router.post(
   '/',
@@ -118,14 +90,8 @@ router.put(
   ctrl.atualizar
 );
 
-router.delete(
-  '/:id',
-  ctrl.excluir
-);
+router.delete('/:id', ctrl.excluir);
 
-router.patch(
-  '/:id/alternar',
-  ctrl.alternarAtivo
-);
+router.patch('/:id/alternar', ctrl.alternarAtivo);
 
 module.exports = router;

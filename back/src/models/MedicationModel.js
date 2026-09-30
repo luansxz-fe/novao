@@ -18,19 +18,16 @@ const medicamentoSchema = new mongoose.Schema(
     dosagem: {
       type: String,
       required: true,
-      trim: true,
     },
 
     unidade: {
       type: String,
       required: true,
-      trim: true,
     },
 
     frequencia: {
       type: String,
       required: true,
-      trim: true,
     },
 
     horarios: {
@@ -103,7 +100,6 @@ const medicamentoSchema = new mongoose.Schema(
       default: null,
     },
   },
-
   {
     timestamps: {
       createdAt: 'criado_em',
@@ -118,68 +114,49 @@ const Medicamento = mongoose.model(
 );
 
 const MedicamentoModel = {
+
   formatar(doc) {
-    if (!doc) {
-      return null;
-    }
+    if (!doc) return null;
 
     const formatarData = (valor) => {
-      if (!valor) {
-        return null;
-      }
+      if (!valor) return null;
 
       if (valor instanceof Date) {
-        return valor
-          .toISOString()
-          .split('T')[0];
+        return valor.toISOString().split('T')[0];
       }
 
       return valor;
     };
 
     return {
-      id: doc._id
-        ? doc._id.toString()
-        : doc.id,
+      id: doc._id.toString(),
 
       usuarioId: doc.usuario_id
         ? doc.usuario_id.toString()
-        : doc.usuarioId,
+        : null,
 
       nome: doc.nome,
-
       dosagem: doc.dosagem,
-
       unidade: doc.unidade,
-
       frequencia: doc.frequencia,
 
       horarios: Array.isArray(doc.horarios)
         ? doc.horarios
         : [],
 
-      dataInicio: formatarData(
-        doc.data_inicio
-      ),
-
-      dataTermino: formatarData(
-        doc.data_termino
-      ),
+      dataInicio: formatarData(doc.data_inicio),
+      dataTermino: formatarData(doc.data_termino),
 
       instrucoes: doc.instrucoes || null,
 
       cor: doc.cor,
-
       icone: doc.icone,
-
       categoria: doc.categoria,
 
       estoqueAtual: doc.estoque_atual,
-
       estoqueMaximo: doc.estoque_maximo,
 
       lembreteAtivo: !!doc.lembrete_ativo,
-
       ativo: !!doc.ativo,
 
       urlImagem: doc.url_imagem || null,
@@ -190,32 +167,25 @@ const MedicamentoModel = {
       efeitosColaterais:
         doc.efeitos_colaterais || null,
 
-      criadoEm:
-        doc.criado_em instanceof Date
-          ? doc.criado_em.toISOString()
-          : doc.criado_em,
+      criadoEm: doc.criado_em
+        ? doc.criado_em.toISOString()
+        : null,
     };
   },
 
   async listarPorUsuario(usuarioId) {
-    if (
-      !mongoose.Types.ObjectId.isValid(
-        usuarioId
-      )
-    ) {
+    if (!mongoose.Types.ObjectId.isValid(usuarioId)) {
       return [];
     }
 
-    const documentos =
-      await Medicamento.find({
-        usuario_id: usuarioId,
-      })
-        .sort({
-          criado_em: -1,
-        });
+    const documentos = await Medicamento.find({
+      usuario_id: usuarioId,
+    })
+      .sort({ criado_em: -1 })
+      .lean();
 
-    return documentos.map(
-      (doc) => this.formatar(doc)
+    return documentos.map((doc) =>
+      this.formatar(doc)
     );
   },
 
@@ -227,95 +197,75 @@ const MedicamentoModel = {
       return null;
     }
 
-    const doc =
-      await Medicamento.findOne({
-        _id: id,
-        usuario_id: usuarioId,
-      });
+    const doc = await Medicamento.findOne({
+      _id: id,
+      usuario_id: usuarioId,
+    }).lean();
 
     return this.formatar(doc);
   },
 
   async criar(usuarioId, dados) {
     if (
-      !mongoose.Types.ObjectId.isValid(
-        usuarioId
-      )
+      !mongoose.Types.ObjectId.isValid(usuarioId)
     ) {
-      throw new Error(
-        'ID do usuário inválido'
-      );
+      throw new Error('Usuario invalido');
     }
 
-    const novoMedicamento =
-      new Medicamento({
-        // IMPORTANTE:
-        // vem do JWT, não do frontend
-        usuario_id: usuarioId,
+    const novoMedicamento = new Medicamento({
+      /*
+       * ESTE CAMPO É O QUE SEPARA OS USUÁRIOS
+       */
+      usuario_id: usuarioId,
 
-        nome: dados.nome,
+      nome: dados.nome,
+      dosagem: dados.dosagem,
+      unidade: dados.unidade,
+      frequencia: dados.frequencia,
 
-        dosagem: dados.dosagem,
+      horarios: Array.isArray(dados.horarios)
+        ? dados.horarios
+        : [],
 
-        unidade: dados.unidade,
+      data_inicio: dados.dataInicio,
+      data_termino: dados.dataTermino || null,
 
-        frequencia: dados.frequencia,
+      instrucoes: dados.instrucoes || null,
 
-        horarios: Array.isArray(
-          dados.horarios
-        )
-          ? dados.horarios
-          : [],
+      cor: dados.cor || '#2563EB',
+      icone: dados.icone || '💊',
+      categoria: dados.categoria || 'Outros',
 
-        data_inicio: dados.dataInicio,
+      estoque_atual:
+        dados.estoqueAtual ?? 30,
 
-        data_termino:
-          dados.dataTermino || null,
+      estoque_maximo:
+        dados.estoqueMaximo ?? 30,
 
-        instrucoes:
-          dados.instrucoes || null,
+      lembrete_ativo:
+        dados.lembreteAtivo !== undefined
+          ? !!dados.lembreteAtivo
+          : true,
 
-        cor: dados.cor,
+      ativo:
+        dados.ativo !== false,
 
-        icone: dados.icone,
+      url_imagem:
+        dados.urlImagem || null,
 
-        categoria: dados.categoria,
+      medico_prescritor:
+        dados.medicoPrescritor || null,
 
-        estoque_atual:
-          dados.estoqueAtual ?? 30,
+      efeitos_colaterais:
+        dados.efeitosColaterais || null,
+    });
 
-        estoque_maximo:
-          dados.estoqueMaximo ?? 30,
-
-        lembrete_ativo:
-          dados.lembreteAtivo !== undefined
-            ? !!dados.lembreteAtivo
-            : true,
-
-        ativo:
-          dados.ativo !== false,
-
-        url_imagem:
-          dados.urlImagem || null,
-
-        medico_prescritor:
-          dados.medicoPrescritor || null,
-
-        efeitos_colaterais:
-          dados.efeitosColaterais || null,
-      });
-
-    const salvo =
-      await novoMedicamento.save();
+    const salvo = await novoMedicamento.save();
 
     return this.formatar(salvo);
   },
 
-  async atualizar(
-    id,
-    usuarioId,
-    dados
-  ) {
+  async atualizar(id, usuarioId, dados) {
     if (
       !mongoose.Types.ObjectId.isValid(id) ||
       !mongoose.Types.ObjectId.isValid(usuarioId)
@@ -340,46 +290,31 @@ const MedicamentoModel = {
       lembreteAtivo: 'lembrete_ativo',
       ativo: 'ativo',
       urlImagem: 'url_imagem',
-      medicoPrescritor:
-        'medico_prescritor',
-      efeitosColaterais:
-        'efeitos_colaterais',
+      medicoPrescritor: 'medico_prescritor',
+      efeitosColaterais: 'efeitos_colaterais',
     };
 
     const atualizacao = {};
 
-    for (
-      const [chave, campoDoc]
-      of Object.entries(mapaCampos)
-    ) {
-      if (
-        dados[chave] === undefined
-      ) {
-        continue;
-      }
+    for (const [chave, campo] of Object.entries(
+      mapaCampos
+    )) {
+      if (dados[chave] === undefined) continue;
 
-      let valor = dados[chave];
-
-      if (valor === '') {
-        valor = null;
-      }
-
-      atualizacao[campoDoc] =
-        valor;
+      atualizacao[campo] = dados[chave];
     }
 
     if (
       Object.keys(atualizacao).length === 0
     ) {
-      return this.buscarUm(
-        id,
-        usuarioId
-      );
+      return this.buscarUm(id, usuarioId);
     }
 
-    // IMPORTANTE:
-    // o ID do medicamento E o ID do usuário
-    // precisam coincidir.
+    /*
+     * MUITO IMPORTANTE:
+     * O ID do medicamento E o ID do usuário
+     * são usados juntos.
+     */
     const docAtualizado =
       await Medicamento.findOneAndUpdate(
         {
@@ -391,13 +326,10 @@ const MedicamentoModel = {
         },
         {
           new: true,
-          runValidators: true,
         }
       );
 
-    return this.formatar(
-      docAtualizado
-    );
+    return this.formatar(docAtualizado);
   },
 
   async excluir(id, usuarioId) {
@@ -411,14 +343,10 @@ const MedicamentoModel = {
     const resultado =
       await Medicamento.deleteOne({
         _id: id,
-
-        // MUITO IMPORTANTE
         usuario_id: usuarioId,
       });
 
-    return (
-      resultado.deletedCount > 0
-    );
+    return resultado.deletedCount > 0;
   },
 };
 

@@ -1,5 +1,4 @@
 const jwt = require('jsonwebtoken');
-const mongoose = require('mongoose');
 const UsuarioModel = require('../models/UserModel');
 
 async function autenticar(req, res, next) {
@@ -9,7 +8,7 @@ async function autenticar(req, res, next) {
     if (!cabecalho || !cabecalho.startsWith('Bearer ')) {
       return res.status(401).json({
         sucesso: false,
-        mensagem: 'Token não fornecido',
+        mensagem: 'Token nao fornecido',
       });
     }
 
@@ -18,16 +17,7 @@ async function autenticar(req, res, next) {
     if (!token) {
       return res.status(401).json({
         sucesso: false,
-        mensagem: 'Token não fornecido',
-      });
-    }
-
-    if (!process.env.JWT_SECRET) {
-      console.error('JWT_SECRET não configurado');
-
-      return res.status(500).json({
-        sucesso: false,
-        mensagem: 'Configuração de autenticação ausente',
+        mensagem: 'Token nao fornecido',
       });
     }
 
@@ -39,55 +29,39 @@ async function autenticar(req, res, next) {
     if (!decodificado || !decodificado.id) {
       return res.status(401).json({
         sucesso: false,
-        mensagem: 'Token inválido',
+        mensagem: 'Token invalido',
       });
     }
 
-    const usuarioId = decodificado.id.toString();
-
-    if (!mongoose.Types.ObjectId.isValid(usuarioId)) {
-      return res.status(401).json({
-        sucesso: false,
-        mensagem: 'ID de usuário inválido',
-      });
-    }
-
-    const usuario = await UsuarioModel.buscarPorId(usuarioId);
+    const usuario = await UsuarioModel.buscarPorId(
+      decodificado.id
+    );
 
     if (!usuario) {
       return res.status(401).json({
         sucesso: false,
-        mensagem: 'Usuário não encontrado',
+        mensagem: 'Usuario nao encontrado',
       });
     }
 
-    // ID oficial do usuário autenticado
-    req.usuarioId = usuario._id.toString();
-
-    // Dados do usuário
-    req.usuario = usuario;
+    req.usuario = UsuarioModel.formatar(usuario);
 
     next();
+
   } catch (erro) {
-    console.error('Erro de autenticação:', erro.message);
+
+    console.error('Erro de autenticacao:', erro.message);
 
     if (erro.name === 'TokenExpiredError') {
       return res.status(401).json({
         sucesso: false,
-        mensagem: 'Sessão expirada, faça login novamente',
-      });
-    }
-
-    if (erro.name === 'JsonWebTokenError') {
-      return res.status(401).json({
-        sucesso: false,
-        mensagem: 'Token inválido',
+        mensagem: 'Sessao expirada, faca login novamente',
       });
     }
 
     return res.status(401).json({
       sucesso: false,
-      mensagem: 'Não foi possível autenticar o usuário',
+      mensagem: 'Token invalido',
     });
   }
 }
