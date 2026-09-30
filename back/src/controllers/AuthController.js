@@ -1,29 +1,52 @@
 const jwt = require('jsonwebtoken');
+
 const UsuarioModel = require('../models/UserModel');
 const TokenModel = require('../models/TokenModel');
-const { enviarEmailRecuperacao } = require('../services/emailService');
+const {
+  enviarEmailRecuperacao,
+} = require('../services/emailService');
 
 function gerarToken(usuario) {
-  const id = usuario._id ? usuario._id.toString() : usuario.id;
+  const id = usuario._id.toString();
+
   return jwt.sign(
-    { id, email: usuario.email },
+    {
+      id,
+      email: usuario.email,
+    },
     process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+    {
+      expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+    }
   );
 }
 
 const AuthController = {
-
   async registrar(req, res, next) {
     try {
-      const { nome, email, senha } = req.body;
+      const {
+        nome,
+        email,
+        senha,
+      } = req.body;
 
-      const existe = await UsuarioModel.buscarPorEmail(email);
+      const existe =
+        await UsuarioModel.buscarPorEmail(email);
+
       if (existe) {
-        return res.status(409).json({ sucesso: false, mensagem: 'Este e-mail ja esta cadastrado' });
+        return res.status(409).json({
+          sucesso: false,
+          mensagem: 'Este e-mail já está cadastrado',
+        });
       }
 
-      const usuario = await UsuarioModel.criar({ nome, email, senha });
+      const usuario =
+        await UsuarioModel.criar({
+          nome,
+          email,
+          senha,
+        });
+
       const token = gerarToken(usuario);
 
       return res.status(201).json({
@@ -39,19 +62,36 @@ const AuthController = {
 
   async login(req, res, next) {
     try {
-      const { email, senha } = req.body;
+      const {
+        email,
+        senha,
+      } = req.body;
 
-      const usuario = await UsuarioModel.buscarPorEmail(email);
+      const usuario =
+        await UsuarioModel.buscarPorEmail(email);
+
       if (!usuario) {
-        return res.status(401).json({ sucesso: false, mensagem: 'E-mail ou senha incorretos' });
+        return res.status(401).json({
+          sucesso: false,
+          mensagem: 'E-mail ou senha incorretos',
+        });
       }
 
-      const valida = await UsuarioModel.verificarSenha(senha, usuario.senha);
-      if (!valida) {
-        return res.status(401).json({ sucesso: false, mensagem: 'E-mail ou senha incorretos' });
+      const senhaValida =
+        await UsuarioModel.verificarSenha(
+          senha,
+          usuario.senha
+        );
+
+      if (!senhaValida) {
+        return res.status(401).json({
+          sucesso: false,
+          mensagem: 'E-mail ou senha incorretos',
+        });
       }
 
       const token = gerarToken(usuario);
+
       return res.json({
         sucesso: true,
         mensagem: 'Login realizado com sucesso',
@@ -64,16 +104,34 @@ const AuthController = {
   },
 
   async meusDados(req, res) {
-    return res.json({ sucesso: true, usuario: UsuarioModel.formatar(req.usuario) });
+    return res.json({
+      sucesso: true,
+      usuario: req.usuario,
+    });
   },
 
   async atualizarMeusDados(req, res, next) {
     try {
-      const { nome, avatar } = req.body;
-      const idUsuario = req.usuario._id || req.usuario.id;
-      const atualizado = await UsuarioModel.atualizar(idUsuario, { nome, avatar });
+      const {
+        nome,
+        avatar,
+      } = req.body;
 
-      return res.json({ sucesso: true, usuario: UsuarioModel.formatar(atualizado) });
+      const idUsuario = req.usuarioId;
+
+      const atualizado =
+        await UsuarioModel.atualizar(
+          idUsuario,
+          {
+            nome,
+            avatar,
+          }
+        );
+
+      return res.json({
+        sucesso: true,
+        usuario: UsuarioModel.formatar(atualizado),
+      });
     } catch (erro) {
       next(erro);
     }
@@ -82,38 +140,58 @@ const AuthController = {
   async esqueciSenha(req, res, next) {
     try {
       const { email } = req.body;
-      const usuario = await UsuarioModel.buscarPorEmail(email);
+
+      const usuario =
+        await UsuarioModel.buscarPorEmail(email);
 
       if (!usuario) {
         return res.json({
           sucesso: true,
-          mensagem: 'Se o e-mail estiver cadastrado, voce recebera o codigo em breve',
+          mensagem:
+            'Se o e-mail estiver cadastrado, você receberá o código em breve',
         });
       }
 
-      const idUsuario = usuario._id || usuario.id;
-      const token = await TokenModel.criar(idUsuario);
+      const idUsuario =
+        usuario._id.toString();
+
+      const token =
+        await TokenModel.criar(idUsuario);
 
       try {
-        await enviarEmailRecuperacao(usuario.email, usuario.nome, token);
+        await enviarEmailRecuperacao(
+          usuario.email,
+          usuario.nome,
+          token
+        );
       } catch (erroEmail) {
-        console.error('Falha ao enviar e-mail:', erroEmail.message);
-        if (process.env.NODE_ENV !== 'production') {
+        console.error(
+          'Falha ao enviar e-mail:',
+          erroEmail.message
+        );
+
+        if (
+          process.env.NODE_ENV !== 'production'
+        ) {
           return res.json({
             sucesso: true,
-            mensagem: 'Nao foi possivel enviar o e-mail. Verifique as configuracoes SMTP no .env',
+            mensagem:
+              'Não foi possível enviar o e-mail. Verifique as configurações SMTP no .env',
             tokenDesenvolvimento: token,
           });
         }
+
         return res.status(500).json({
           sucesso: false,
-          mensagem: 'Erro ao enviar e-mail. Tente novamente mais tarde',
+          mensagem:
+            'Erro ao enviar e-mail. Tente novamente mais tarde',
         });
       }
 
       return res.json({
         sucesso: true,
-        mensagem: 'Codigo de recuperacao enviado para seu e-mail',
+        mensagem:
+          'Código de recuperação enviado para seu e-mail',
       });
     } catch (erro) {
       next(erro);
@@ -122,20 +200,49 @@ const AuthController = {
 
   async redefinirSenha(req, res, next) {
     try {
-      const { token, novaSenha } = req.body;
+      const {
+        token,
+        novaSenha,
+      } = req.body;
 
-      const registro = await TokenModel.buscarValido(token);
+      const registro =
+        await TokenModel.buscarValido(token);
+
       if (!registro) {
-        return res.status(400).json({ sucesso: false, mensagem: 'Codigo invalido ou expirado' });
+        return res.status(400).json({
+          sucesso: false,
+          mensagem:
+            'Código inválido ou expirado',
+        });
       }
 
-      const usuario = await UsuarioModel.buscarPorEmail(registro.email);
-      const idUsuario = usuario._id || usuario.id;
+      const usuario =
+        await UsuarioModel.buscarPorEmail(
+          registro.email
+        );
 
-      await UsuarioModel.alterarSenha(idUsuario, novaSenha);
+      if (!usuario) {
+        return res.status(404).json({
+          sucesso: false,
+          mensagem: 'Usuário não encontrado',
+        });
+      }
+
+      const idUsuario =
+        usuario._id.toString();
+
+      await UsuarioModel.alterarSenha(
+        idUsuario,
+        novaSenha
+      );
+
       await TokenModel.marcarUtilizado(token);
 
-      return res.json({ sucesso: true, mensagem: 'Senha redefinida com sucesso' });
+      return res.json({
+        sucesso: true,
+        mensagem:
+          'Senha redefinida com sucesso',
+      });
     } catch (erro) {
       next(erro);
     }
