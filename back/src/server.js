@@ -7,7 +7,7 @@ const conectarBanco = require('./config/database');
 
 const rotasAuth = require('./routes/authRoutes.js');
 const rotasUsuarios = require('./routes/usuarioRoutes.js');
-const rotasMedicamentos = require('./routes/MedicationRoutes.js');
+const rotasMedicamentos = require('./routes/medicationRoutes.js');
 const rotasRegistros = require('./routes/logRoutes.js');
 const { tratarErro, rotaNaoEncontrada } = require('./middleware/errorHandler.js');
 
