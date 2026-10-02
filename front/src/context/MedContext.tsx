@@ -77,8 +77,82 @@ export const MedContext =
  * =========================================================
  */
 
+function obterToken(): string | null {
+  try {
+    const token =
+      localStorage.getItem(
+        'medsync_token'
+      );
+
+    return token
+      ? token.trim()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function extrairPayloadJwt(
+  token: string
+): any | null {
+  try {
+    const partes =
+      token.split('.');
+
+    if (partes.length !== 3) {
+      return null;
+    }
+
+    const base64 =
+      partes[1]
+        .replace(/-/g, '+')
+        .replace(/_/g, '/');
+
+    const padded =
+      base64.padEnd(
+        base64.length +
+          ((4 - (base64.length % 4)) % 4),
+        '='
+      );
+
+    return JSON.parse(
+      atob(padded)
+    );
+  } catch {
+    return null;
+  }
+}
+
 function obterUsuarioId(): string | null {
   try {
+    /*
+     * 1. Sessão atual.
+     * Essa é a fonte usada pela aplicação
+     * quando o usuário está logado.
+     */
+    const sessaoSalva =
+      localStorage.getItem(
+        'medsync_sessao'
+      );
+
+    if (sessaoSalva) {
+      const sessao =
+        JSON.parse(sessaoSalva);
+
+      const id =
+        sessao?.id ??
+        sessao?.usuario?.id ??
+        sessao?.usuarioId ??
+        sessao?.userId;
+
+      if (id) {
+        return String(id);
+      }
+    }
+
+    /*
+     * 2. Formato antigo de sessão.
+     */
     const usuarioSalvo =
       localStorage.getItem(
         'medsync_usuario'
@@ -88,19 +162,43 @@ function obterUsuarioId(): string | null {
       const usuario =
         JSON.parse(usuarioSalvo);
 
-      if (usuario?.id) {
-        return String(usuario.id);
+      const id =
+        usuario?.id ??
+        usuario?.usuarioId ??
+        usuario?.userId;
+
+      if (id) {
+        return String(id);
       }
     }
 
     /*
-     * Fallback:
-     * se não houver usuário salvo,
-     * consulta o backend.
+     * 3. Último fallback: JWT.
      *
-     * O ID também pode ser obtido do JWT,
-     * mas não precisamos fazer isso aqui.
+     * O backend autentica pelo JWT, então
+     * o cache não pode depender exclusivamente
+     * de medsync_sessao ou medsync_usuario.
      */
+    const token =
+      obterToken();
+
+    if (token) {
+      const payload =
+        extrairPayloadJwt(
+          token
+        );
+
+      const id =
+        payload?.id ??
+        payload?.sub ??
+        payload?.usuarioId ??
+        payload?.userId;
+
+      if (id) {
+        return String(id);
+      }
+    }
+
     return null;
   } catch {
     return null;
@@ -655,14 +753,17 @@ export const MedProvider: React.FC<{
          * Se não existe usuário logado,
          * não carregamos absolutamente nada.
          */
-        const usuarioId =
-          obterUsuarioId();
+        const token =
+          obterToken();
 
-        if (!usuarioId) {
+        if (!token) {
           setMedications([]);
           setLogs([]);
           return;
         }
+
+        const usuarioId =
+          obterUsuarioId();
 
         const [
           medsRes,
@@ -697,10 +798,17 @@ export const MedProvider: React.FC<{
             formatados
           );
 
+          const usuarioResposta =
+            medsRes.dados[0]?.usuarioId ??
+            medsRes.dados[0]?.usuario_id ??
+            usuarioId;
+
           const key =
-            getStorageKey(
-              'meds'
-            );
+            usuarioResposta
+              ? `@medapp:${String(usuarioResposta)}:meds`
+              : getStorageKey(
+                  'meds'
+                );
 
           if (key) {
             localStorage.setItem(
@@ -792,14 +900,24 @@ export const MedProvider: React.FC<{
         _id?: string;
       }
     ) => {
-      const usuarioId =
-        obterUsuarioId();
+      /*
+       * A autenticação real é feita pelo JWT
+       * dentro de api.ts/backend.
+       *
+       * Não bloqueamos a criação só porque
+       * o ID não está no localStorage.
+       */
+      const token =
+        obterToken();
 
-      if (!usuarioId) {
+      if (!token) {
         throw new Error(
           'Usuário não autenticado'
         );
       }
+
+      const usuarioId =
+        obterUsuarioId();
 
       const payload =
         parseToApiPayload(
@@ -832,10 +950,17 @@ export const MedProvider: React.FC<{
                   novoMed,
                 ];
 
+              const usuarioResposta =
+                res?.dados?.usuarioId ??
+                res?.dados?.usuario_id ??
+                usuarioId;
+
               const key =
-                getStorageKey(
-                  'meds'
-                );
+                usuarioResposta
+                  ? `@medapp:${String(usuarioResposta)}:meds`
+                  : getStorageKey(
+                      'meds'
+                    );
 
               if (key) {
                 localStorage.setItem(
