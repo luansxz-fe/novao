@@ -79,24 +79,6 @@ export const MedContext =
 
 function obterUsuarioId(): string | null {
   try {
-    const sessaoSalva =
-      localStorage.getItem(
-        'medsync_sessao'
-      );
-
-    if (sessaoSalva) {
-      const sessao =
-        JSON.parse(sessaoSalva);
-
-      if (sessao?.id) {
-        return String(sessao.id);
-      }
-
-      if (sessao?.usuario?.id) {
-        return String(sessao.usuario.id);
-      }
-    }
-
     const usuarioSalvo =
       localStorage.getItem(
         'medsync_usuario'
@@ -111,6 +93,14 @@ function obterUsuarioId(): string | null {
       }
     }
 
+    /*
+     * Fallback:
+     * se não houver usuário salvo,
+     * consulta o backend.
+     *
+     * O ID também pode ser obtido do JWT,
+     * mas não precisamos fazer isso aqui.
+     */
     return null;
   } catch {
     return null;
@@ -460,10 +450,10 @@ export const MedProvider: React.FC<{
 
     const backendStatus =
       isTaken
-        ? 'tomada'
+        ? 'TOMADO'
         : isMissed
-        ? 'perdida'
-        : 'pulada';
+        ? 'PERDIDO'
+        : 'PULADO';
 
     const medId = String(
       l.medicamentoId ||
@@ -1056,10 +1046,10 @@ export const MedProvider: React.FC<{
 
       const backendStatus =
         isTaken
-          ? 'TOMADO'
+          ? 'tomada'
           : isMissed
-          ? 'PERDIDO'
-          : 'PULADO';
+          ? 'perdida'
+          : 'pulada';
 
       const existingLog =
         logs.find(
@@ -1080,7 +1070,7 @@ export const MedProvider: React.FC<{
         existingLog?.status ===
           'taken' ||
         existingLog?.situacao ===
-          'tomada';
+          'TOMADO';
 
       const newLog: DoseLog = {
         id: String(
@@ -1509,7 +1499,7 @@ export const MedProvider: React.FC<{
           l.status ===
             'taken' ||
           l.situacao ===
-            'tomada'
+            'TOMADO'
       ).length;
 
     return Math.round(
