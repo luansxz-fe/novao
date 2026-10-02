@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 
 const UsuarioModel = require('../models/UserModel');
 const TokenModel = require('../models/TokenModel');
+
 const {
   enviarEmailRecuperacao,
 } = require('../services/emailService');
@@ -16,7 +17,8 @@ function gerarToken(usuario) {
     },
     process.env.JWT_SECRET,
     {
-      expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+      expiresIn:
+        process.env.JWT_EXPIRES_IN || '7d',
     }
   );
 }
@@ -31,12 +33,15 @@ const AuthController = {
       } = req.body;
 
       const existe =
-        await UsuarioModel.buscarPorEmail(email);
+        await UsuarioModel.buscarPorEmail(
+          email
+        );
 
       if (existe) {
         return res.status(409).json({
           sucesso: false,
-          mensagem: 'Este e-mail já está cadastrado',
+          mensagem:
+            'Este e-mail já está cadastrado',
         });
       }
 
@@ -47,13 +52,18 @@ const AuthController = {
           senha,
         });
 
-      const token = gerarToken(usuario);
+      const token =
+        gerarToken(usuario);
 
       return res.status(201).json({
         sucesso: true,
-        mensagem: 'Conta criada com sucesso',
+        mensagem:
+          'Conta criada com sucesso',
         token,
-        usuario: UsuarioModel.formatar(usuario),
+        usuario:
+          UsuarioModel.formatar(
+            usuario
+          ),
       });
     } catch (erro) {
       next(erro);
@@ -68,12 +78,15 @@ const AuthController = {
       } = req.body;
 
       const usuario =
-        await UsuarioModel.buscarPorEmail(email);
+        await UsuarioModel.buscarPorEmail(
+          email
+        );
 
       if (!usuario) {
         return res.status(401).json({
           sucesso: false,
-          mensagem: 'E-mail ou senha incorretos',
+          mensagem:
+            'E-mail ou senha incorretos',
         });
       }
 
@@ -86,17 +99,23 @@ const AuthController = {
       if (!senhaValida) {
         return res.status(401).json({
           sucesso: false,
-          mensagem: 'E-mail ou senha incorretos',
+          mensagem:
+            'E-mail ou senha incorretos',
         });
       }
 
-      const token = gerarToken(usuario);
+      const token =
+        gerarToken(usuario);
 
       return res.json({
         sucesso: true,
-        mensagem: 'Login realizado com sucesso',
+        mensagem:
+          'Login realizado com sucesso',
         token,
-        usuario: UsuarioModel.formatar(usuario),
+        usuario:
+          UsuarioModel.formatar(
+            usuario
+          ),
       });
     } catch (erro) {
       next(erro);
@@ -110,39 +129,125 @@ const AuthController = {
     });
   },
 
-  async atualizarMeusDados(req, res, next) {
+  async atualizarMeusDados(
+    req,
+    res,
+    next
+  ) {
     try {
       const {
         nome,
         avatar,
       } = req.body;
 
-      const idUsuario = req.usuarioId;
+      /*
+       * O middleware auth.js agora garante
+       * que req.usuarioId seja o ID real
+       * do usuario autenticado.
+       */
+      const idUsuario =
+        req.usuarioId;
 
+      if (!idUsuario) {
+        return res.status(401).json({
+          sucesso: false,
+          mensagem:
+            'Usuario nao autenticado',
+        });
+      }
+
+      /*
+       * Monta somente os campos enviados.
+       */
+      const dados = {};
+
+      if (nome !== undefined) {
+        if (
+          typeof nome !== 'string' ||
+          nome.trim().length < 2
+        ) {
+          return res.status(400).json({
+            sucesso: false,
+            mensagem:
+              'Nome invalido',
+          });
+        }
+
+        dados.nome =
+          nome.trim();
+      }
+
+      if (avatar !== undefined) {
+        dados.avatar = avatar;
+      }
+
+      if (
+        Object.keys(dados).length === 0
+      ) {
+        return res.status(400).json({
+          sucesso: false,
+          mensagem:
+            'Nenhum dado para atualizar',
+        });
+      }
+
+      /*
+       * Atualiza exatamente o usuario
+       * identificado pelo JWT.
+       */
       const atualizado =
         await UsuarioModel.atualizar(
           idUsuario,
-          {
-            nome,
-            avatar,
-          }
+          dados
         );
+
+      if (!atualizado) {
+        return res.status(404).json({
+          sucesso: false,
+          mensagem:
+            'Usuario nao encontrado',
+        });
+      }
+
+      const usuario =
+        UsuarioModel.formatar(
+          atualizado
+        );
+
+      console.log(
+        '[PERFIL] Usuario atualizado:',
+        usuario
+      );
 
       return res.json({
         sucesso: true,
-        usuario: UsuarioModel.formatar(atualizado),
+        mensagem:
+          'Perfil atualizado com sucesso',
+        usuario,
       });
     } catch (erro) {
+      console.error(
+        '[PERFIL] Erro ao atualizar usuario:',
+        erro
+      );
+
       next(erro);
     }
   },
 
-  async esqueciSenha(req, res, next) {
+  async esqueciSenha(
+    req,
+    res,
+    next
+  ) {
     try {
-      const { email } = req.body;
+      const { email } =
+        req.body;
 
       const usuario =
-        await UsuarioModel.buscarPorEmail(email);
+        await UsuarioModel.buscarPorEmail(
+          email
+        );
 
       if (!usuario) {
         return res.json({
@@ -156,7 +261,9 @@ const AuthController = {
         usuario._id.toString();
 
       const token =
-        await TokenModel.criar(idUsuario);
+        await TokenModel.criar(
+          idUsuario
+        );
 
       try {
         await enviarEmailRecuperacao(
@@ -171,13 +278,15 @@ const AuthController = {
         );
 
         if (
-          process.env.NODE_ENV !== 'production'
+          process.env.NODE_ENV !==
+          'production'
         ) {
           return res.json({
             sucesso: true,
             mensagem:
               'Não foi possível enviar o e-mail. Verifique as configurações SMTP no .env',
-            tokenDesenvolvimento: token,
+            tokenDesenvolvimento:
+              token,
           });
         }
 
@@ -198,7 +307,11 @@ const AuthController = {
     }
   },
 
-  async redefinirSenha(req, res, next) {
+  async redefinirSenha(
+    req,
+    res,
+    next
+  ) {
     try {
       const {
         token,
@@ -206,7 +319,9 @@ const AuthController = {
       } = req.body;
 
       const registro =
-        await TokenModel.buscarValido(token);
+        await TokenModel.buscarValido(
+          token
+        );
 
       if (!registro) {
         return res.status(400).json({
@@ -224,7 +339,8 @@ const AuthController = {
       if (!usuario) {
         return res.status(404).json({
           sucesso: false,
-          mensagem: 'Usuário não encontrado',
+          mensagem:
+            'Usuário não encontrado',
         });
       }
 
@@ -236,7 +352,9 @@ const AuthController = {
         novaSenha
       );
 
-      await TokenModel.marcarUtilizado(token);
+      await TokenModel.marcarUtilizado(
+        token
+      );
 
       return res.json({
         sucesso: true,
