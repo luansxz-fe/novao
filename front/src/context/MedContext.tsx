@@ -12,7 +12,6 @@ import {
 } from '../types';
 
 import { api } from '../services/api';
-import { useAuth } from './AuthContext';
 
 export interface MedContextData {
   medications: Medication[];
@@ -78,64 +77,30 @@ export const MedContext =
  * =========================================================
  */
 
-function extrairIdDoToken(token: string): string | null {
-  try {
-    const partes = token.split('.');
-
-    if (partes.length !== 3) {
-      return null;
-    }
-
-    const payload = partes[1]
-      .replace(/-/g, '+')
-      .replace(/_/g, '/');
-
-    const preenchido =
-      payload + '='.repeat((4 - (payload.length % 4)) % 4);
-
-    const dados = JSON.parse(atob(preenchido));
-
-    return dados?.id ? String(dados.id) : null;
-  } catch {
-    return null;
-  }
-}
-
 function obterUsuarioId(): string | null {
   try {
-    /* JWT = fonte principal da identidade atual. */
-    const token = localStorage.getItem('medsync_token');
-
-    if (token) {
-      const idDoToken = extrairIdDoToken(token);
-
-      if (idDoToken) {
-        return idDoToken;
-      }
-    }
-
-    /* Fallback para a sessão salva. */
-    const sessaoSalva = localStorage.getItem('medsync_sessao');
-
-    if (sessaoSalva) {
-      const usuario = JSON.parse(sessaoSalva);
-
-      if (usuario?.id) {
-        return String(usuario.id);
-      }
-    }
-
-    /* Compatibilidade com versões antigas. */
-    const usuarioSalvo = localStorage.getItem('medsync_usuario');
+    const usuarioSalvo =
+      localStorage.getItem(
+        'medsync_usuario'
+      );
 
     if (usuarioSalvo) {
-      const usuario = JSON.parse(usuarioSalvo);
+      const usuario =
+        JSON.parse(usuarioSalvo);
 
       if (usuario?.id) {
         return String(usuario.id);
       }
     }
 
+    /*
+     * Fallback:
+     * se não houver usuário salvo,
+     * consulta o backend.
+     *
+     * O ID também pode ser obtido do JWT,
+     * mas não precisamos fazer isso aqui.
+     */
     return null;
   } catch {
     return null;
@@ -273,11 +238,6 @@ const isTimePassed = (
 export const MedProvider: React.FC<{
   children: React.ReactNode;
 }> = ({ children }) => {
-  const { usuario, isLoading: authLoading } = useAuth();
-
-  const usuarioIdAutenticado =
-    usuario?.id ? String(usuario.id) : null;
-
   const [medications, setMedications] =
     useState<Medication[]>([]);
 
@@ -461,21 +421,32 @@ export const MedProvider: React.FC<{
           l.status ||
           ''
       )
-        .toUpperCase()
+        .toLowerCase()
         .trim();
 
     const isTaken = [
-      'TOMADO',
-      'TAKEN',
-      'CONCLUIDO',
-      'OK',
-      'TRUE',
+      'tomada',
+      'tomado',
+      'taken',
+      'concluida',
+      'concluído',
+      'concluido',
+      'ok',
+      'true',
     ].includes(rawStatus);
 
     const isMissed = [
-      'PERDIDO',
-      'MISSED',
-      'ATRASADO',
+      'perdida',
+      'perdido',
+      'missed',
+      'atrasada',
+      'atrasado',
+    ].includes(rawStatus);
+
+    const isSkipped = [
+      'pulada',
+      'pulado',
+      'skipped',
     ].includes(rawStatus);
 
     const frontendStatus:
@@ -490,10 +461,10 @@ export const MedProvider: React.FC<{
 
     const backendStatus =
       isTaken
-        ? 'TOMADO'
+        ? 'tomada'
         : isMissed
-        ? 'PERDIDO'
-        : 'PULADO';
+        ? 'perdida'
+        : 'pulada';
 
     const medId = String(
       l.medicamentoId ||
@@ -792,10 +763,6 @@ export const MedProvider: React.FC<{
           'Erro ao carregar dados da API:',
           error
         );
-
-        /* Nunca mantemos dados antigos após falha de carregamento. */
-        setMedications([]);
-        setLogs([]);
       }
     }, [
       fetchAdherence,
@@ -809,26 +776,13 @@ export const MedProvider: React.FC<{
    * 3. busca dados reais da API
    */
   useEffect(() => {
-    /* Aguarda o AuthContext terminar de recuperar a sessão. */
-    if (authLoading) {
-      return;
-    }
-
-    /* Ao trocar de conta, limpa imediatamente o estado anterior. */
     setMedications([]);
     setLogs([]);
 
-    /* Sem usuário autenticado, não carregamos nenhum dado. */
-    if (!usuarioIdAutenticado) {
-      return;
-    }
-
-    /* Carrega somente o cache/API pertencente à conta atual. */
     carregarCache();
+
     fetchMedications();
   }, [
-    authLoading,
-    usuarioIdAutenticado,
     carregarCache,
     fetchMedications,
   ]);
@@ -1103,10 +1057,10 @@ export const MedProvider: React.FC<{
 
       const backendStatus =
         isTaken
-          ? 'TOMADO'
+          ? 'tomada'
           : isMissed
-          ? 'PERDIDO'
-          : 'PULADO';
+          ? 'perdida'
+          : 'pulada';
 
       const existingLog =
         logs.find(
@@ -1127,7 +1081,11 @@ export const MedProvider: React.FC<{
         existingLog?.status ===
           'taken' ||
         existingLog?.situacao ===
-          'TOMADO';
+          'TOMADO' ||
+        existingLog?.situacao ===
+          'tomada' ||
+        existingLog?.situacao ===
+          'tomado';
 
       const newLog: DoseLog = {
         id: String(
@@ -1322,6 +1280,43 @@ export const MedProvider: React.FC<{
           'Erro ao salvar registro:',
           error
         );
+
+        /*
+         * O registro local nao pode ser considerado
+         * permanente se o backend recusou a gravacao.
+         * Recarrega os registros reais do servidor.
+         */
+        try {
+          const logsRes =
+            await api.registros.listar();
+
+          if (
+            logsRes?.dados &&
+            Array.isArray(logsRes.dados)
+          ) {
+            const logsFormatados =
+              logsRes.dados.map(parseLog);
+
+            setLogs(logsFormatados);
+
+            const key =
+              getStorageKey('logs');
+
+            if (key) {
+              localStorage.setItem(
+                key,
+                JSON.stringify(logsFormatados)
+              );
+            }
+          } else {
+            setLogs([]);
+          }
+        } catch (reloadError) {
+          console.error(
+            'Erro ao recarregar registros:',
+            reloadError
+          );
+        }
       }
     };
 
@@ -1556,7 +1551,11 @@ export const MedProvider: React.FC<{
           l.status ===
             'taken' ||
           l.situacao ===
-            'TOMADO'
+            'TOMADO' ||
+          l.situacao ===
+            'tomada' ||
+          l.situacao ===
+            'tomado'
       ).length;
 
     return Math.round(
