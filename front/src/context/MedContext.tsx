@@ -12,6 +12,7 @@ import {
 } from '../types';
 
 import { api } from '../services/api';
+import { useAuth } from './AuthContext';
 
 export interface MedContextData {
   medications: Medication[];
@@ -77,47 +78,24 @@ export const MedContext =
  * =========================================================
  */
 
-function obterToken(): string | null {
+function extrairIdDoToken(token: string): string | null {
   try {
-    const token =
-      localStorage.getItem(
-        'medsync_token'
-      );
-
-    return token
-      ? token.trim()
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function extrairPayloadJwt(
-  token: string
-): any | null {
-  try {
-    const partes =
-      token.split('.');
+    const partes = token.split('.');
 
     if (partes.length !== 3) {
       return null;
     }
 
-    const base64 =
-      partes[1]
-        .replace(/-/g, '+')
-        .replace(/_/g, '/');
+    const payload = partes[1]
+      .replace(/-/g, '+')
+      .replace(/_/g, '/');
 
-    const padded =
-      base64.padEnd(
-        base64.length +
-          ((4 - (base64.length % 4)) % 4),
-        '='
-      );
+    const preenchido =
+      payload + '='.repeat((4 - (payload.length % 4)) % 4);
 
-    return JSON.parse(
-      atob(padded)
-    );
+    const dados = JSON.parse(atob(preenchido));
+
+    return dados?.id ? String(dados.id) : null;
   } catch {
     return null;
   }
@@ -125,80 +103,36 @@ function extrairPayloadJwt(
 
 function obterUsuarioId(): string | null {
   try {
-    /*
-     * REGRA PRINCIPAL:
-     * o JWT é a identidade usada pelo backend.
-     *
-     * Portanto, ele precisa ter prioridade sobre
-     * qualquer dado antigo salvo no localStorage.
-     */
-    const token =
-      obterToken();
+    /* JWT = fonte principal da identidade atual. */
+    const token = localStorage.getItem('medsync_token');
 
     if (token) {
-      const payload =
-        extrairPayloadJwt(
-          token
-        );
+      const idDoToken = extrairIdDoToken(token);
 
-      const id =
-        payload?.id ??
-        payload?.sub ??
-        payload?.usuarioId ??
-        payload?.userId;
-
-      if (id) {
-        return String(id);
+      if (idDoToken) {
+        return idDoToken;
       }
     }
 
-    /*
-     * Fallback para sessões antigas.
-     * Só usamos isso quando o JWT não possui o ID.
-     */
-    const sessaoSalva =
-      localStorage.getItem(
-        'medsync_sessao'
-      );
+    /* Fallback para a sessão salva. */
+    const sessaoSalva = localStorage.getItem('medsync_sessao');
 
     if (sessaoSalva) {
-      const sessao =
-        JSON.parse(
-          sessaoSalva
-        );
+      const usuario = JSON.parse(sessaoSalva);
 
-      const id =
-        sessao?.id ??
-        sessao?.usuario?.id ??
-        sessao?.usuarioId ??
-        sessao?.userId;
-
-      if (id) {
-        return String(id);
+      if (usuario?.id) {
+        return String(usuario.id);
       }
     }
 
-    /*
-     * Último fallback para instalações antigas.
-     */
-    const usuarioSalvo =
-      localStorage.getItem(
-        'medsync_usuario'
-      );
+    /* Compatibilidade com versões antigas. */
+    const usuarioSalvo = localStorage.getItem('medsync_usuario');
 
     if (usuarioSalvo) {
-      const usuario =
-        JSON.parse(
-          usuarioSalvo
-        );
+      const usuario = JSON.parse(usuarioSalvo);
 
-      const id =
-        usuario?.id ??
-        usuario?.usuarioId ??
-        usuario?.userId;
-
-      if (id) {
-        return String(id);
+      if (usuario?.id) {
+        return String(usuario.id);
       }
     }
 
@@ -339,6 +273,11 @@ const isTimePassed = (
 export const MedProvider: React.FC<{
   children: React.ReactNode;
 }> = ({ children }) => {
+  const { usuario, isLoading: authLoading } = useAuth();
+
+  const usuarioIdAutenticado =
+    usuario?.id ? String(usuario.id) : null;
+
   const [medications, setMedications] =
     useState<Medication[]>([]);
 
@@ -516,48 +455,28 @@ export const MedProvider: React.FC<{
   const parseLog = (
     l: any
   ): DoseLog => {
-    const situacaoRaw =
-      String(l.situacao ?? '')
-        .trim()
-        .toLowerCase();
-
-    const statusRaw =
-      String(l.status ?? '')
-        .trim()
-        .toLowerCase();
-
-    const statusNormalizado =
-      situacaoRaw || statusRaw;
+    const rawStatus =
+      String(
+        l.situacao ||
+          l.status ||
+          ''
+      )
+        .toUpperCase()
+        .trim();
 
     const isTaken = [
-      'tomada',
-      'tomado',
-      'taken',
-      'concluida',
-      'concluído',
-      'concluido',
-      'ok',
-      'true',
-    ].includes(statusNormalizado);
+      'TOMADO',
+      'TAKEN',
+      'CONCLUIDO',
+      'OK',
+      'TRUE',
+    ].includes(rawStatus);
 
     const isMissed = [
-      'perdida',
-      'perdido',
-      'missed',
-      'atrasada',
-      'atrasado',
-    ].includes(statusNormalizado);
-
-    const isSkipped = [
-      'pulada',
-      'pulado',
-      'skipped',
-    ].includes(statusNormalizado);
-
-    const isPending = [
-      'pendente',
-      'pending',
-    ].includes(statusNormalizado);
+      'PERDIDO',
+      'MISSED',
+      'ATRASADO',
+    ].includes(rawStatus);
 
     const frontendStatus:
       | 'taken'
@@ -571,14 +490,10 @@ export const MedProvider: React.FC<{
 
     const backendStatus =
       isTaken
-        ? 'tomada'
+        ? 'TOMADO'
         : isMissed
-        ? 'perdida'
-        : isSkipped
-        ? 'pulada'
-        : isPending
-        ? 'pendente'
-        : 'pulada';
+        ? 'PERDIDO'
+        : 'PULADO';
 
     const medId = String(
       l.medicamentoId ||
@@ -606,7 +521,8 @@ export const MedProvider: React.FC<{
           Date.now()
       ).trim(),
 
-      medicationId: medId,
+      medicationId:
+        medId,
 
       scheduledTime:
         normalizeTime(
@@ -615,9 +531,11 @@ export const MedProvider: React.FC<{
             l.horario
         ),
 
-      status: frontendStatus,
+      status:
+        frontendStatus,
 
-      situacao: backendStatus,
+      situacao:
+        backendStatus,
 
       date:
         normalizeDate(
@@ -777,17 +695,14 @@ export const MedProvider: React.FC<{
          * Se não existe usuário logado,
          * não carregamos absolutamente nada.
          */
-        const token =
-          obterToken();
+        const usuarioId =
+          obterUsuarioId();
 
-        if (!token) {
+        if (!usuarioId) {
           setMedications([]);
           setLogs([]);
           return;
         }
-
-        const usuarioId =
-          obterUsuarioId();
 
         const [
           medsRes,
@@ -822,17 +737,10 @@ export const MedProvider: React.FC<{
             formatados
           );
 
-          const usuarioResposta =
-            medsRes.dados[0]?.usuarioId ??
-            medsRes.dados[0]?.usuario_id ??
-            usuarioId;
-
           const key =
-            usuarioResposta
-              ? `@medapp:${String(usuarioResposta)}:meds`
-              : getStorageKey(
-                  'meds'
-                );
+            getStorageKey(
+              'meds'
+            );
 
           if (key) {
             localStorage.setItem(
@@ -884,6 +792,10 @@ export const MedProvider: React.FC<{
           'Erro ao carregar dados da API:',
           error
         );
+
+        /* Nunca mantemos dados antigos após falha de carregamento. */
+        setMedications([]);
+        setLogs([]);
       }
     }, [
       fetchAdherence,
@@ -897,13 +809,26 @@ export const MedProvider: React.FC<{
    * 3. busca dados reais da API
    */
   useEffect(() => {
+    /* Aguarda o AuthContext terminar de recuperar a sessão. */
+    if (authLoading) {
+      return;
+    }
+
+    /* Ao trocar de conta, limpa imediatamente o estado anterior. */
     setMedications([]);
     setLogs([]);
 
-    carregarCache();
+    /* Sem usuário autenticado, não carregamos nenhum dado. */
+    if (!usuarioIdAutenticado) {
+      return;
+    }
 
+    /* Carrega somente o cache/API pertencente à conta atual. */
+    carregarCache();
     fetchMedications();
   }, [
+    authLoading,
+    usuarioIdAutenticado,
     carregarCache,
     fetchMedications,
   ]);
@@ -924,24 +849,14 @@ export const MedProvider: React.FC<{
         _id?: string;
       }
     ) => {
-      /*
-       * A autenticação real é feita pelo JWT
-       * dentro de api.ts/backend.
-       *
-       * Não bloqueamos a criação só porque
-       * o ID não está no localStorage.
-       */
-      const token =
-        obterToken();
+      const usuarioId =
+        obterUsuarioId();
 
-      if (!token) {
+      if (!usuarioId) {
         throw new Error(
           'Usuário não autenticado'
         );
       }
-
-      const usuarioId =
-        obterUsuarioId();
 
       const payload =
         parseToApiPayload(
@@ -974,17 +889,10 @@ export const MedProvider: React.FC<{
                   novoMed,
                 ];
 
-              const usuarioResposta =
-                res?.dados?.usuarioId ??
-                res?.dados?.usuario_id ??
-                usuarioId;
-
               const key =
-                usuarioResposta
-                  ? `@medapp:${String(usuarioResposta)}:meds`
-                  : getStorageKey(
-                      'meds'
-                    );
+                getStorageKey(
+                  'meds'
+                );
 
               if (key) {
                 localStorage.setItem(
@@ -1167,10 +1075,7 @@ export const MedProvider: React.FC<{
 
       const isTaken = [
         'taken',
-        'tomada',
         'tomado',
-        'concluida',
-        'concluído',
         'concluido',
         'ok',
         'true',
@@ -1180,18 +1085,8 @@ export const MedProvider: React.FC<{
 
       const isMissed = [
         'missed',
-        'perdida',
         'perdido',
-        'atrasada',
         'atrasado',
-      ].includes(
-        rawStatus
-      );
-
-      const isSkipped = [
-        'skipped',
-        'pulada',
-        'pulado',
       ].includes(
         rawStatus
       );
@@ -1208,12 +1103,10 @@ export const MedProvider: React.FC<{
 
       const backendStatus =
         isTaken
-          ? 'tomada'
+          ? 'TOMADO'
           : isMissed
-          ? 'perdida'
-          : isSkipped
-          ? 'pulada'
-          : 'pendente';
+          ? 'PERDIDO'
+          : 'PULADO';
 
       const existingLog =
         logs.find(
@@ -1233,17 +1126,8 @@ export const MedProvider: React.FC<{
       const wasTakenBefore =
         existingLog?.status ===
           'taken' ||
-        [
-          'tomada',
-          'tomado',
-        ].includes(
-          String(
-            existingLog?.situacao ||
-              ''
-          )
-            .trim()
-            .toLowerCase()
-        );
+        existingLog?.situacao ===
+          'TOMADO';
 
       const newLog: DoseLog = {
         id: String(
@@ -1671,17 +1555,8 @@ export const MedProvider: React.FC<{
         l =>
           l.status ===
             'taken' ||
-          [
-            'tomada',
-            'tomado',
-          ].includes(
-            String(
-              l.situacao ||
-                ''
-            )
-              .trim()
-              .toLowerCase()
-          )
+          l.situacao ===
+            'TOMADO'
       ).length;
 
     return Math.round(
