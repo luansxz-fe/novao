@@ -79,12 +79,6 @@ export const MedContext =
 
 function obterUsuarioId(): string | null {
   try {
-    /*
-     * Sessão atual do usuário.
-     *
-     * O login salva os dados em:
-     * medsync_sessao
-     */
     const sessaoSalva =
       localStorage.getItem(
         'medsync_sessao'
@@ -94,30 +88,15 @@ function obterUsuarioId(): string | null {
       const sessao =
         JSON.parse(sessaoSalva);
 
-      /*
-       * Caso a sessão seja diretamente o usuário:
-       * { id: "..." }
-       */
       if (sessao?.id) {
         return String(sessao.id);
       }
 
-      /*
-       * Caso a sessão tenha o usuário dentro:
-       * { usuario: { id: "..." } }
-       */
       if (sessao?.usuario?.id) {
-        return String(
-          sessao.usuario.id
-        );
+        return String(sessao.usuario.id);
       }
     }
 
-    /*
-     * Fallback:
-     * compatibilidade com versões antigas
-     * que utilizavam medsync_usuario.
-     */
     const usuarioSalvo =
       localStorage.getItem(
         'medsync_usuario'
@@ -481,10 +460,10 @@ export const MedProvider: React.FC<{
 
     const backendStatus =
       isTaken
-        ? 'TOMADO'
+        ? 'tomada'
         : isMissed
-        ? 'PERDIDO'
-        : 'PULADO';
+        ? 'perdida'
+        : 'pulada';
 
     const medId = String(
       l.medicamentoId ||
@@ -1101,7 +1080,7 @@ export const MedProvider: React.FC<{
         existingLog?.status ===
           'taken' ||
         existingLog?.situacao ===
-          'TOMADO';
+          'tomada';
 
       const newLog: DoseLog = {
         id: String(
@@ -1530,7 +1509,7 @@ export const MedProvider: React.FC<{
           l.status ===
             'taken' ||
           l.situacao ===
-            'TOMADO'
+            'tomada'
       ).length;
 
     return Math.round(
