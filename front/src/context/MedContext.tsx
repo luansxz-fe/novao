@@ -126,58 +126,11 @@ function extrairPayloadJwt(
 function obterUsuarioId(): string | null {
   try {
     /*
-     * 1. Sessão atual.
-     * Essa é a fonte usada pela aplicação
-     * quando o usuário está logado.
-     */
-    const sessaoSalva =
-      localStorage.getItem(
-        'medsync_sessao'
-      );
-
-    if (sessaoSalva) {
-      const sessao =
-        JSON.parse(sessaoSalva);
-
-      const id =
-        sessao?.id ??
-        sessao?.usuario?.id ??
-        sessao?.usuarioId ??
-        sessao?.userId;
-
-      if (id) {
-        return String(id);
-      }
-    }
-
-    /*
-     * 2. Formato antigo de sessão.
-     */
-    const usuarioSalvo =
-      localStorage.getItem(
-        'medsync_usuario'
-      );
-
-    if (usuarioSalvo) {
-      const usuario =
-        JSON.parse(usuarioSalvo);
-
-      const id =
-        usuario?.id ??
-        usuario?.usuarioId ??
-        usuario?.userId;
-
-      if (id) {
-        return String(id);
-      }
-    }
-
-    /*
-     * 3. Último fallback: JWT.
+     * REGRA PRINCIPAL:
+     * o JWT é a identidade usada pelo backend.
      *
-     * O backend autentica pelo JWT, então
-     * o cache não pode depender exclusivamente
-     * de medsync_sessao ou medsync_usuario.
+     * Portanto, ele precisa ter prioridade sobre
+     * qualquer dado antigo salvo no localStorage.
      */
     const token =
       obterToken();
@@ -193,6 +146,56 @@ function obterUsuarioId(): string | null {
         payload?.sub ??
         payload?.usuarioId ??
         payload?.userId;
+
+      if (id) {
+        return String(id);
+      }
+    }
+
+    /*
+     * Fallback para sessões antigas.
+     * Só usamos isso quando o JWT não possui o ID.
+     */
+    const sessaoSalva =
+      localStorage.getItem(
+        'medsync_sessao'
+      );
+
+    if (sessaoSalva) {
+      const sessao =
+        JSON.parse(
+          sessaoSalva
+        );
+
+      const id =
+        sessao?.id ??
+        sessao?.usuario?.id ??
+        sessao?.usuarioId ??
+        sessao?.userId;
+
+      if (id) {
+        return String(id);
+      }
+    }
+
+    /*
+     * Último fallback para instalações antigas.
+     */
+    const usuarioSalvo =
+      localStorage.getItem(
+        'medsync_usuario'
+      );
+
+    if (usuarioSalvo) {
+      const usuario =
+        JSON.parse(
+          usuarioSalvo
+        );
+
+      const id =
+        usuario?.id ??
+        usuario?.usuarioId ??
+        usuario?.userId;
 
       if (id) {
         return String(id);
@@ -513,28 +516,48 @@ export const MedProvider: React.FC<{
   const parseLog = (
     l: any
   ): DoseLog => {
-    const rawStatus =
-      String(
-        l.situacao ||
-          l.status ||
-          ''
-      )
-        .toUpperCase()
-        .trim();
+    const situacaoRaw =
+      String(l.situacao ?? '')
+        .trim()
+        .toLowerCase();
+
+    const statusRaw =
+      String(l.status ?? '')
+        .trim()
+        .toLowerCase();
+
+    const statusNormalizado =
+      situacaoRaw || statusRaw;
 
     const isTaken = [
-      'TOMADO',
-      'TAKEN',
-      'CONCLUIDO',
-      'OK',
-      'TRUE',
-    ].includes(rawStatus);
+      'tomada',
+      'tomado',
+      'taken',
+      'concluida',
+      'concluído',
+      'concluido',
+      'ok',
+      'true',
+    ].includes(statusNormalizado);
 
     const isMissed = [
-      'PERDIDO',
-      'MISSED',
-      'ATRASADO',
-    ].includes(rawStatus);
+      'perdida',
+      'perdido',
+      'missed',
+      'atrasada',
+      'atrasado',
+    ].includes(statusNormalizado);
+
+    const isSkipped = [
+      'pulada',
+      'pulado',
+      'skipped',
+    ].includes(statusNormalizado);
+
+    const isPending = [
+      'pendente',
+      'pending',
+    ].includes(statusNormalizado);
 
     const frontendStatus:
       | 'taken'
@@ -548,10 +571,14 @@ export const MedProvider: React.FC<{
 
     const backendStatus =
       isTaken
-        ? 'TOMADO'
+        ? 'tomada'
         : isMissed
-        ? 'PERDIDO'
-        : 'PULADO';
+        ? 'perdida'
+        : isSkipped
+        ? 'pulada'
+        : isPending
+        ? 'pendente'
+        : 'pulada';
 
     const medId = String(
       l.medicamentoId ||
@@ -579,8 +606,7 @@ export const MedProvider: React.FC<{
           Date.now()
       ).trim(),
 
-      medicationId:
-        medId,
+      medicationId: medId,
 
       scheduledTime:
         normalizeTime(
@@ -589,11 +615,9 @@ export const MedProvider: React.FC<{
             l.horario
         ),
 
-      status:
-        frontendStatus,
+      status: frontendStatus,
 
-      situacao:
-        backendStatus,
+      situacao: backendStatus,
 
       date:
         normalizeDate(
@@ -1143,7 +1167,10 @@ export const MedProvider: React.FC<{
 
       const isTaken = [
         'taken',
+        'tomada',
         'tomado',
+        'concluida',
+        'concluído',
         'concluido',
         'ok',
         'true',
@@ -1153,8 +1180,18 @@ export const MedProvider: React.FC<{
 
       const isMissed = [
         'missed',
+        'perdida',
         'perdido',
+        'atrasada',
         'atrasado',
+      ].includes(
+        rawStatus
+      );
+
+      const isSkipped = [
+        'skipped',
+        'pulada',
+        'pulado',
       ].includes(
         rawStatus
       );
@@ -1174,7 +1211,9 @@ export const MedProvider: React.FC<{
           ? 'tomada'
           : isMissed
           ? 'perdida'
-          : 'pulada';
+          : isSkipped
+          ? 'pulada'
+          : 'pendente';
 
       const existingLog =
         logs.find(
@@ -1194,8 +1233,17 @@ export const MedProvider: React.FC<{
       const wasTakenBefore =
         existingLog?.status ===
           'taken' ||
-        existingLog?.situacao ===
-          'TOMADO';
+        [
+          'tomada',
+          'tomado',
+        ].includes(
+          String(
+            existingLog?.situacao ||
+              ''
+          )
+            .trim()
+            .toLowerCase()
+        );
 
       const newLog: DoseLog = {
         id: String(
@@ -1623,8 +1671,17 @@ export const MedProvider: React.FC<{
         l =>
           l.status ===
             'taken' ||
-          l.situacao ===
-            'TOMADO'
+          [
+            'tomada',
+            'tomado',
+          ].includes(
+            String(
+              l.situacao ||
+                ''
+            )
+              .trim()
+              .toLowerCase()
+          )
       ).length;
 
     return Math.round(

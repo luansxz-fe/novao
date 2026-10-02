@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useMed } from '../context/MedContext';
 import { Page } from '../components/AppRouter';
@@ -13,24 +13,77 @@ export default function ProfilePage({ navigate }: Props) {
   const [editando, setEditando] = useState(false);
   const [nome, setNome] = useState(usuario?.name || '');
   const [mensagem, setMensagem] = useState('');
+
+  useEffect(() => {
+    setNome(usuario?.name || '');
+  }, [usuario?.name]);
   const [confirmarSaida, setConfirmarSaida] = useState(false);
   const [confirmarModo, setConfirmarModo] = useState(false);
 
   const exibirMensagem = (msg: string) => { setMensagem(msg); setTimeout(() => setMensagem(''), 3000); };
 
   const handleSalvar = async () => {
-    if (!nome.trim()) return;
+    const novoNome = nome.trim();
+
+    if (!novoNome) {
+      exibirMensagem('Informe um nome válido');
+      return;
+    }
+
     try {
-      await atualizarUsuario({ name: nome.trim() });
+      await atualizarUsuario({
+        name: novoNome,
+      });
+
+      /*
+       * Atualiza imediatamente a tela, mesmo antes
+       * de qualquer rerender externo do contexto.
+       * O atualizarUsuario continua sendo responsável
+       * por persistir o nome no backend/sessão.
+       */
+      setNome(novoNome);
       setEditando(false);
-      exibirMensagem('Perfil atualizado com sucesso');
-    } catch {
-      exibirMensagem('Erro ao atualizar perfil');
+      exibirMensagem(
+        'Perfil atualizado com sucesso'
+      );
+    } catch (erro) {
+      console.error(
+        'Erro ao atualizar perfil:',
+        erro
+      );
+      exibirMensagem(
+        'Erro ao atualizar perfil'
+      );
     }
   };
 
-  const totalTomadas = logs.filter(l => l.status === 'taken' || l.situacao === 'TOMADO').length;
-  const totalPerdidas = logs.filter(l => l.status === 'missed' || l.situacao === 'PERDIDO').length;
+  const totalTomadas = logs.filter(l => {
+    const situacao = String(
+      l.situacao || ''
+    )
+      .trim()
+      .toLowerCase();
+
+    return (
+      l.status === 'taken' ||
+      situacao === 'tomada' ||
+      situacao === 'tomado'
+    );
+  }).length;
+
+  const totalPerdidas = logs.filter(l => {
+    const situacao = String(
+      l.situacao || ''
+    )
+      .trim()
+      .toLowerCase();
+
+    return (
+      l.status === 'missed' ||
+      situacao === 'perdida' ||
+      situacao === 'perdido'
+    );
+  }).length;
   const medsAtivos = medications.filter(m => m.active).length;
   const adesao = logs.length ? Math.round((totalTomadas / logs.length) * 100) : 100;
   const dataIngresso = usuario?.createdAt
@@ -38,7 +91,7 @@ export default function ProfilePage({ navigate }: Props) {
     : '';
 
   const exportarDados = () => {
-    const dados = { usuario: { nome: usuario?.name, email: usuario?.email }, medicamentos: medications, registros: logs, exportadoEm: new Date().toISOString() };
+    const dados = { usuario: { nome: nome, email: usuario?.email }, medicamentos: medications, registros: logs, exportadoEm: new Date().toISOString() };
     const blob = new Blob([JSON.stringify(dados, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -56,7 +109,7 @@ export default function ProfilePage({ navigate }: Props) {
         <div className="profile-hero__bg" />
         <div className="profile-hero__content" style={{ width: '100%', maxWidth: '100%' }}>
           <div className="profile-avatar-lg">
-            {usuario?.name?.charAt(0).toUpperCase()}
+            {nome?.charAt(0).toUpperCase()}
           </div>
           <div className="profile-hero__info" style={{ flex: 1 }}>
             {editando ? (
@@ -67,7 +120,7 @@ export default function ProfilePage({ navigate }: Props) {
               </div>
             ) : (
               <div className="profile-name-row">
-                <h1>{usuario?.name}</h1>
+                <h1>{nome}</h1>
                 <button className="btn btn--ghost btn--xs" onClick={() => setEditando(true)}>✏️</button>
               </div>
             )}
