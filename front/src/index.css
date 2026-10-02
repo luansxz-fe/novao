@@ -224,6 +224,7 @@ textarea { resize: vertical; min-height: 80px; }
 }
 .toggle--on { background: var(--brand); }
 .toggle--on span { transform: translateX(20px); }
+.toggle:disabled { opacity: 0.65; cursor: wait; }
 .toggle-label { display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
 
 /* ====================== CARDS ====================== */

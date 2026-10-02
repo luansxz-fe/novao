@@ -35,6 +35,10 @@ export interface MedContextData {
     data: Partial<Medication>
   ) => Promise<void>;
 
+  toggleMedication: (
+    id: string
+  ) => Promise<void>;
+
   deleteMedication: (
     id: string
   ) => Promise<void>;
@@ -421,32 +425,21 @@ export const MedProvider: React.FC<{
           l.status ||
           ''
       )
-        .toLowerCase()
+        .toUpperCase()
         .trim();
 
     const isTaken = [
-      'tomada',
-      'tomado',
-      'taken',
-      'concluida',
-      'concluído',
-      'concluido',
-      'ok',
-      'true',
+      'TOMADO',
+      'TAKEN',
+      'CONCLUIDO',
+      'OK',
+      'TRUE',
     ].includes(rawStatus);
 
     const isMissed = [
-      'perdida',
-      'perdido',
-      'missed',
-      'atrasada',
-      'atrasado',
-    ].includes(rawStatus);
-
-    const isSkipped = [
-      'pulada',
-      'pulado',
-      'skipped',
+      'PERDIDO',
+      'MISSED',
+      'ATRASADO',
     ].includes(rawStatus);
 
     const frontendStatus:
@@ -461,10 +454,10 @@ export const MedProvider: React.FC<{
 
     const backendStatus =
       isTaken
-        ? 'tomada'
+        ? 'TOMADO'
         : isMissed
-        ? 'perdida'
-        : 'pulada';
+        ? 'PERDIDO'
+        : 'PULADO';
 
     const medId = String(
       l.medicamentoId ||
@@ -887,53 +880,135 @@ export const MedProvider: React.FC<{
       }
 
       try {
+        /*
+         * PUT /medicamentos/:id exige todos os campos obrigatórios.
+         * Portanto, quando a tela envia apenas { active: false },
+         * mesclamos os dados atuais antes de montar o payload.
+         */
+        const atual = medications.find(
+          m =>
+            String(m.id) === String(id) ||
+            String(m._id) === String(id)
+        );
+
+        const dadosCompletos: Medication = {
+          ...(atual || ({} as Medication)),
+          ...data,
+          id: atual?.id || String(id),
+          _id: atual?._id || String(id),
+        };
+
         const res =
           await api.medicamentos.atualizar(
             String(id),
             parseToApiPayload(
-              data
+              dadosCompletos
             )
           );
 
-        if (res?.dados) {
-          const medAtualizado =
-            formatMed(
-              res.dados
-            );
-
-          setMedications(
-            prev => {
-              const novoEstado =
-                prev.map(m =>
-                  String(m.id) ===
-                    String(id) ||
-                  String(m._id) ===
-                    String(id)
-                    ? medAtualizado
-                    : m
-                );
-
-              const key =
-                getStorageKey(
-                  'meds'
-                );
-
-              if (key) {
-                localStorage.setItem(
-                  key,
-                  JSON.stringify(
-                    novoEstado
-                  )
-                );
-              }
-
-              return novoEstado;
-            }
+        const medAtualizado =
+          formatMed(
+            res?.dados ||
+              dadosCompletos
           );
-        }
+
+        setMedications(
+          prev => {
+            const novoEstado =
+              prev.map(m =>
+                String(m.id) === String(id) ||
+                String(m._id) === String(id)
+                  ? medAtualizado
+                  : m
+              );
+
+            const key =
+              getStorageKey('meds');
+
+            if (key) {
+              localStorage.setItem(
+                key,
+                JSON.stringify(novoEstado)
+              );
+            }
+
+            return novoEstado;
+          }
+        );
       } catch (error) {
         console.error(
           'Erro ao atualizar medicamento:',
+          error
+        );
+
+        throw error;
+      }
+    };
+
+  /*
+   * Alterna somente o status ativo/inativo.
+   * Usa o endpoint PATCH específico do backend.
+   */
+  const toggleMedication =
+    async (id: string) => {
+      if (!id) {
+        return;
+      }
+
+      const atual = medications.find(
+        m =>
+          String(m.id) === String(id) ||
+          String(m._id) === String(id)
+      );
+
+      if (!atual) {
+        return;
+      }
+
+      const novoAtivo = !Boolean(
+        atual.active
+      );
+
+      try {
+        const res =
+          await api.medicamentos.alternar(
+            String(id)
+          );
+
+        const medAtualizado =
+          res?.dados
+            ? formatMed(res.dados)
+            : {
+                ...atual,
+                active: novoAtivo,
+              };
+
+        setMedications(
+          prev => {
+            const novoEstado =
+              prev.map(m =>
+                String(m.id) === String(id) ||
+                String(m._id) === String(id)
+                  ? medAtualizado
+                  : m
+              );
+
+            const key =
+              getStorageKey('meds');
+
+            if (key) {
+              localStorage.setItem(
+                key,
+                JSON.stringify(novoEstado)
+              );
+            }
+
+            return novoEstado;
+          }
+        );
+      } catch (error) {
+        console.error(
+          'Erro ao alternar status do medicamento:',
           error
         );
 
@@ -1057,10 +1132,10 @@ export const MedProvider: React.FC<{
 
       const backendStatus =
         isTaken
-          ? 'tomada'
+          ? 'TOMADO'
           : isMissed
-          ? 'perdida'
-          : 'pulada';
+          ? 'PERDIDO'
+          : 'PULADO';
 
       const existingLog =
         logs.find(
@@ -1081,11 +1156,7 @@ export const MedProvider: React.FC<{
         existingLog?.status ===
           'taken' ||
         existingLog?.situacao ===
-          'TOMADO' ||
-        existingLog?.situacao ===
-          'tomada' ||
-        existingLog?.situacao ===
-          'tomado';
+          'TOMADO';
 
       const newLog: DoseLog = {
         id: String(
@@ -1280,43 +1351,6 @@ export const MedProvider: React.FC<{
           'Erro ao salvar registro:',
           error
         );
-
-        /*
-         * O registro local nao pode ser considerado
-         * permanente se o backend recusou a gravacao.
-         * Recarrega os registros reais do servidor.
-         */
-        try {
-          const logsRes =
-            await api.registros.listar();
-
-          if (
-            logsRes?.dados &&
-            Array.isArray(logsRes.dados)
-          ) {
-            const logsFormatados =
-              logsRes.dados.map(parseLog);
-
-            setLogs(logsFormatados);
-
-            const key =
-              getStorageKey('logs');
-
-            if (key) {
-              localStorage.setItem(
-                key,
-                JSON.stringify(logsFormatados)
-              );
-            }
-          } else {
-            setLogs([]);
-          }
-        } catch (reloadError) {
-          console.error(
-            'Erro ao recarregar registros:',
-            reloadError
-          );
-        }
       }
     };
 
@@ -1551,11 +1585,7 @@ export const MedProvider: React.FC<{
           l.status ===
             'taken' ||
           l.situacao ===
-            'TOMADO' ||
-          l.situacao ===
-            'tomada' ||
-          l.situacao ===
-            'tomado'
+            'TOMADO'
       ).length;
 
     return Math.round(
@@ -1575,6 +1605,8 @@ export const MedProvider: React.FC<{
         addMedication,
 
         updateMedication,
+
+        toggleMedication,
 
         deleteMedication,
 

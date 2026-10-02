@@ -6,7 +6,7 @@ import MedModal from '../components/MedModal';
 const CATEGORIES = ['Todos', 'Cardiovascular', 'Diabetes', 'Pressão', 'Vitaminas', 'Antibiótico', 'Dor/Febre', 'Digestivo', 'Sono', 'Outros'];
 
 export default function MedicationsPage() {
-  const { medications, deleteMedication, updateMedication } = useMed();
+  const { medications, deleteMedication, toggleMedication } = useMed();
   const [showModal, setShowModal] = useState(false);
   const [editMed, setEditMed] = useState<Medication | undefined>();
   const [search, setSearch] = useState('');
@@ -24,7 +24,20 @@ export default function MedicationsPage() {
 
   const handleEdit = (med: Medication) => { setEditMed(med); setShowModal(true); };
   const handleDelete = (id: string) => { deleteMedication(id); setConfirmDelete(null); };
-  const handleToggle = (med: Medication) => updateMedication(med.id, { active: !med.active });
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  const handleToggle = async (med: Medication) => {
+    if (togglingId === med.id) return;
+
+    setTogglingId(med.id);
+    try {
+      await toggleMedication(med.id);
+    } catch {
+      // O estado só é alterado após o backend confirmar a operação.
+    } finally {
+      setTogglingId(null);
+    }
+  };
 
   const stockPct = (med: Medication) => {
     const max = med.stockMax || med.stock || 30;
@@ -94,7 +107,10 @@ export default function MedicationsPage() {
                   <div className="med-card__toggle-abs">
                     <button
                       className={`toggle ${med.active ? 'toggle--on' : ''}`}
-                      onClick={() => handleToggle(med)}
+                      onClick={() => void handleToggle(med)}
+                      disabled={togglingId === med.id}
+                      aria-pressed={med.active}
+                      aria-label={med.active ? `Desativar ${med.name}` : `Ativar ${med.name}`}
                       title={med.active ? 'Desativar' : 'Ativar'}
                     ><span /></button>
                   </div>
@@ -167,7 +183,7 @@ export default function MedicationsPage() {
                   </div>
                 </div>
                 <div className="med-list-item__actions">
-                  <button className={`toggle ${med.active ? 'toggle--on' : ''}`} onClick={() => handleToggle(med)}><span /></button>
+                  <button className={`toggle ${med.active ? 'toggle--on' : ''}`} onClick={() => void handleToggle(med)} disabled={togglingId === med.id} aria-pressed={med.active} aria-label={med.active ? `Desativar ${med.name}` : `Ativar ${med.name}`} title={med.active ? 'Desativar' : 'Ativar'}><span /></button>
                   <button className="btn btn--outline btn--xs" onClick={() => handleEdit(med)}>✏️</button>
                   <button className="btn btn--danger-ghost btn--xs" onClick={() => setConfirmDelete(med.id)}>🗑️</button>
                 </div>
