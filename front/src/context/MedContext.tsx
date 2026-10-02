@@ -79,6 +79,45 @@ export const MedContext =
 
 function obterUsuarioId(): string | null {
   try {
+    /*
+     * Sessão atual do usuário.
+     *
+     * O login salva os dados em:
+     * medsync_sessao
+     */
+    const sessaoSalva =
+      localStorage.getItem(
+        'medsync_sessao'
+      );
+
+    if (sessaoSalva) {
+      const sessao =
+        JSON.parse(sessaoSalva);
+
+      /*
+       * Caso a sessão seja diretamente o usuário:
+       * { id: "..." }
+       */
+      if (sessao?.id) {
+        return String(sessao.id);
+      }
+
+      /*
+       * Caso a sessão tenha o usuário dentro:
+       * { usuario: { id: "..." } }
+       */
+      if (sessao?.usuario?.id) {
+        return String(
+          sessao.usuario.id
+        );
+      }
+    }
+
+    /*
+     * Fallback:
+     * compatibilidade com versões antigas
+     * que utilizavam medsync_usuario.
+     */
     const usuarioSalvo =
       localStorage.getItem(
         'medsync_usuario'
@@ -93,14 +132,6 @@ function obterUsuarioId(): string | null {
       }
     }
 
-    /*
-     * Fallback:
-     * se não houver usuário salvo,
-     * consulta o backend.
-     *
-     * O ID também pode ser obtido do JWT,
-     * mas não precisamos fazer isso aqui.
-     */
     return null;
   } catch {
     return null;
